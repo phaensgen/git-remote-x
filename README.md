@@ -54,7 +54,6 @@ git remote add origin s3enc://<bucketName>/<path>/<repoName.git>
 ```
 
 # Open Issues
-* replace runtimeexceptions
 * check process streaming
 ** use apache commons exec
 * add git-remote-s3
@@ -62,3 +61,7 @@ git remote add origin s3enc://<bucketName>/<path>/<repoName.git>
 * add git-remote-s3enc
 ** support large files
 * describe installation (link)
+
+# Disclaimer
+This project is for educational purposes only. It should not be used for production use! Make sure you have a backup of your data
+before trying out this tool!

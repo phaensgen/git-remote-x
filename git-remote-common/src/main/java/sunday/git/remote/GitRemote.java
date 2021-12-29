@@ -371,7 +371,7 @@ public class GitRemote
     {
         if (!name.startsWith("refs/"))
         {
-            throw new RuntimeException();
+            throw new GitRemoteException("Invalid ref path: " + name);
         }
 
         return Path.of(name);
@@ -411,7 +411,7 @@ public class GitRemote
         SHA1 computedSha1 = new SHA1(git.decodeObject(data));
         if (!computedSha1.equals(sha1))
         {
-            throw new RuntimeException("hash mismatch");
+            throw new GitRemoteException("Provided and computed hashes do not match: " + sha1 + " != " + computedSha1);
         }
     }
 
@@ -431,13 +431,13 @@ public class GitRemote
             {
                 if (!git.objectExists(sha1))
                 {
-                    throw new RuntimeException("fetch first");
+                    throw new GitRemoteException("Object not found, fetch first.");
                 }
 
                 boolean isFastForward = git.isAncestor(sha1, newSha1);
                 if (!isFastForward)
                 {
-                    throw new RuntimeException("non-fast forward");
+                    throw new GitRemoteException("Non-fast forward, resolve this first.");
                 }
             }
         }

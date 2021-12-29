@@ -165,7 +165,7 @@ public class Git
         }
         catch (IOException ex)
         {
-            throw new RuntimeException(ex);
+            throw new GitRemoteException(ex);
         }
     }
 
@@ -188,7 +188,7 @@ public class Git
 
         if (index < 0)
         {
-            throw new RuntimeException("Invalid content");
+            throw new GitRemoteException("Invalid content");
         }
 
         String header = new String(data, 0, index - 1, StandardCharsets.UTF_8);
@@ -221,7 +221,7 @@ public class Git
         }
         catch (IOException io)
         {
-            throw new RuntimeException(io);
+            throw new GitRemoteException(io);
         }
     }
 
@@ -323,7 +323,7 @@ public class Git
         }
         else
         {
-            throw new RuntimeException("Unexpected kind: " + kind);
+            throw new GitRemoteException("Unexpected kind: " + kind);
         }
 
         return objs;
