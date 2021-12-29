@@ -1,7 +1,6 @@
 package sunday.git.remote;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -37,13 +36,12 @@ public class GitRemote
     /**
      * The constructor.
      */
-    public GitRemote(File workingDir, File gitDir, Storage storage)
+    public GitRemote(Git git, Storage storage)
     {
+        this.git = git;
         this.storage = storage;
 
         remoteRefs = new HashMap<>();
-
-        git = new Git(workingDir, gitDir);
     }
 
     /**

@@ -68,6 +68,14 @@ public class Git
     }
 
     /**
+     * Returns the git configuration value with the given name.
+     */
+    public String getConfig(String name)
+    {
+        return executeGitCommand("config", name).getFirstLine();
+    }
+
+    /**
      * Returns whether ancestor is an ancestor of ref.
      * This returns true when it is possible to fast-forward from ancestor to ref.
      */

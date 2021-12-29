@@ -10,7 +10,7 @@
 		<version>0.1-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>git-remote-local</artifactId>
+	<artifactId>git-remote-s3</artifactId>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -20,11 +20,27 @@
 		<maven.compiler.target>17</maven.compiler.target>
 	</properties>
 
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.amazonaws</groupId>
+				<artifactId>aws-java-sdk-bom</artifactId>
+				<version>1.12.131</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 		<dependency>
 			<groupId>sunday</groupId>
 			<artifactId>git-remote-common</artifactId>
 			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-s3</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>junit</groupId>
@@ -43,7 +59,7 @@
 				<configuration>
 					<archive>
 						<manifest>
-							<mainClass>sunday.git.remote.local.GitRemoteLocal</mainClass>
+							<mainClass>sunday.git.remote.s3.GitRemoteS3</mainClass>
 						</manifest>
 					</archive>
 					<descriptorRefs>

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 
+import sunday.git.remote.Git;
 import sunday.git.remote.GitRemote;
 
 /**
@@ -42,6 +43,7 @@ public class GitRemoteLocal
         Path basePath = Path.of(url.substring("local://".length()));
         LocalStorage storage = new LocalStorage(basePath);
 
-        new GitRemote(new File("."), new File(gitDir), storage).repl();
+        Git git = new Git(new File("."), new File(gitDir));
+        new GitRemote(git, storage).repl();
     }
 }

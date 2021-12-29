@@ -33,8 +33,9 @@ The AWS credentials to access the bucket must be configured in the local git con
 Example:
 
 ```
-git config git.remote.s3enc.awsclientid <awsClientId>
-git config git.remote.s3enc.awssecretkey <awsSecretKey>
+git config s3.accesskeyid <awsAccessKeyId>
+git config s3.secretkey <awsSecretKey>
+git config s3.region <awsRegion>
 git remote add origin s3://<bucketName>/<pathInBucket>/<repoName.git>
 ```
 
