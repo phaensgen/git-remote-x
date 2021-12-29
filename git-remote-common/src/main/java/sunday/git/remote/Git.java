@@ -44,6 +44,9 @@ public class Git
     {
         Map<String, String> environment = new HashMap<>();
         environment.put("GIT_DIR", gitDir.toString());
+        // set the user home directory because this may be needed to access the global
+        // git configuration (like for git clone)
+        environment.put("HOME", System.getProperty("user.home"));
 
         try
         {

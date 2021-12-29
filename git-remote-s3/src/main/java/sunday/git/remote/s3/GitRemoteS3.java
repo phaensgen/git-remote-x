@@ -53,6 +53,7 @@ public class GitRemoteS3
         }
 
         Git git = new Git(new File("."), new File(gitDir));
+
         String accessKeyId = git.getConfig("s3.accesskeyid");
         String secretKey = git.getConfig("s3.secretkey");
         String region = git.getConfig("s3.region");

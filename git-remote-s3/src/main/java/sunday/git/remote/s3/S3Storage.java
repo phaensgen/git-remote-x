@@ -8,8 +8,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.http.HttpStatus;
+
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.ListObjectsV2Request;
 import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -63,6 +66,15 @@ public class S3Storage implements Storage
             S3Object o = s3.getObject(bucketName, key);
             return o.getObjectContent().readAllBytes();
         }
+        catch (AmazonS3Exception ex)
+        {
+            if (ex.getStatusCode() == HttpStatus.SC_NOT_FOUND)
+            {
+                throw new GitRemoteException("File not found: " + key);
+            }
+
+            throw new GitRemoteException(ex);
+        }
         catch (IOException io)
         {
             throw new GitRemoteException(io);
@@ -84,12 +96,6 @@ public class S3Storage implements Storage
     {
         String bucketName = configuration.getBucketName();
         String key = getKey(path);
-
-        System.err.println("bucket: " + bucketName);
-        System.err.println("key: " + key);
-        System.err.println("access key: " + configuration.getAccessKeyId());
-        System.err.println("secret key: " + configuration.getSecretKey());
-        System.err.println("region: " + configuration.getRegion());
 
         List<Path> files = new ArrayList<>();
 
