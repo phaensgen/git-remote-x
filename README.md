@@ -1,3 +1,5 @@
+[![Build Actions Status](https://github.com/phaensgen/git-remote-x/workflows/build/badge.svg)](https://github.com/phaensgen/git-remote-x/actions)
+
 # Git Remote X
 This project provides a number of remote helpers for Git which support pushing data to various non-git remote repositories.
 Git projects can be pushed to / pulled from the remote repository, just like to / from any other regular Git server.
