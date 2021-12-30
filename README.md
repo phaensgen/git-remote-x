@@ -61,10 +61,14 @@ git remote add origin s3://<bucketName>/<pathInBucket>/<repoName.git>
 ## git-remote-s3enc
 This helper stores files in an AWS S3 bucket in an encrypted form. It uses "s3enc://" for the URL protocol.
 The url specifies the S3 bucket name and the path in the bucket where the objects will be stored.
-Anything that gets uploaded will be encrypted on the client-side using AES256. This affects path names as well as the actual file contents.
+Anything that gets uploaded will be encrypted on client-side using AES256. This affects only the actual file contents.
+Path names are SHA1 hash codes in git anyway, so they don't represent anything secret.
 The encryption key and the AWS credentials to access the bucket must be configured in the global git configuration for the repository.
 
 ### Configuration
+
+The configuration is similar to the S3 configuration without encryption, exception that there is an additional setting for the
+encryption key.
 
 ```
 git config --global s3enc.accesskeyid <awsAccessKeyId>
@@ -74,10 +78,25 @@ git config --global s3enc.encryptionkey <encryptionKey>
 git remote add origin s3enc://<bucketName>/<pathInBucket>/<repoName.git>
 ```
 
+The encryption key is a Base64 encoded AES key (which is simply an array of 32 random bytes). To make it easier to generate such a key,
+the git-remote-s3enc tool can be called with the -generateKey option:
+
+```
+git-remote-s3enc -generateKey
+```
+
+This produces a key that can be configured at git for encryption, for example like this:
+
+```
+git config --global s3.encryptionKey $(git-remote-s3enc -generateKey)
+```
+
+The key should also be stored at a safe place, for example in a password manager.
+
+
 # Open Issues
 * check process streaming
 * support large files for s3
-* add git-remote-s3enc
 * support large files for s3enc
 * describe installation (link)
 * git build process?

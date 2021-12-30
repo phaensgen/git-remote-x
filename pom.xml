@@ -19,5 +19,6 @@
 		<module>git-remote-local</module>
 		<module>git-remote-local-test</module>
 		<module>git-remote-s3</module>
+		<module>git-remote-s3enc</module>
 	</modules>
 </project>
