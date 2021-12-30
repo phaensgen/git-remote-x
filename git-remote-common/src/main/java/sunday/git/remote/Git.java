@@ -1,5 +1,6 @@
 package sunday.git.remote;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -12,6 +13,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.InflaterInputStream;
 
 import org.apache.commons.exec.CommandLine;
 import org.apache.commons.exec.DefaultExecutor;
@@ -163,21 +166,22 @@ public class Git
         String size = getObjectSize(sha1);
         byte[] contents = getObjectData(sha1, kind);
 
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream())
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
+
+        // git uses zlib compression
+        try (DeflaterOutputStream out = new DeflaterOutputStream(data))
         {
             String header = kind + ' ' + size;
             out.write(header.getBytes(StandardCharsets.UTF_8));
             out.write(0);
             out.write(contents);
-
-            // TODO zlib compression?
-            // String compressed = zlib.compress(data)
-            return out.toByteArray();
         }
         catch (IOException ex)
         {
             throw new GitRemoteException(ex);
         }
+
+        return data.toByteArray();
     }
 
     /**
@@ -186,31 +190,48 @@ public class Git
      */
     public String decodeObject(byte[] data)
     {
-        // TODO zlib decompression?
-        int index = -1;
-        for (int i = 0; i < data.length; i++)
+        ByteArrayOutputStream header = new ByteArrayOutputStream();
+        ByteArrayOutputStream content = new ByteArrayOutputStream();
+
+        // git uses zlib compression
+        try (InflaterInputStream in = new InflaterInputStream(new ByteArrayInputStream(data)))
         {
-            if (data[i] == 0)
+            // collect header
+            while (true)
             {
-                index = i;
-                break;
+                int ch = in.read();
+
+                // 0 is the separator between header and content
+                if (ch <= 0)
+                {
+                    break;
+                }
+
+                header.write(ch);
+            }
+
+            // collect content
+            while (true)
+            {
+                int ch = in.read();
+                if (ch < 0)
+                {
+                    break;
+                }
+
+                content.write(ch);
             }
         }
-
-        if (index < 0)
+        catch (IOException ex)
         {
-            throw new GitRemoteException("Invalid content");
+            throw new GitRemoteException(ex);
         }
 
-        String header = new String(data, 0, index - 1, StandardCharsets.UTF_8);
-        String[] h = header.split(" ");
+        String headerString = new String(header.toByteArray(), StandardCharsets.UTF_8);
+        String[] h = headerString.split(" ");
         String kind = h[0];
 
-        int n = data.length - index - 1;
-        byte[] contents = new byte[n];
-        System.arraycopy(data, index + 1, contents, 0, n);
-
-        return writeObject(kind, contents);
+        return writeObject(kind, content.toByteArray());
     }
 
     /**
