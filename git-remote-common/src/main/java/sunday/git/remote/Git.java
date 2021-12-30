@@ -4,9 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -38,39 +37,6 @@ public class Git
     {
         this.workingDir = workingDir;
         this.gitDir = gitDir;
-    }
-
-    /**
-     * Executes a git command by spawning a subprocess with the given args.
-     */
-    public GitResult executeGitCommand(String... args)
-    {
-        Map<String, String> environment = new HashMap<>();
-        environment.put("GIT_DIR", gitDir.toString());
-        // set the user home directory because this may be needed to access the global
-        // git configuration (like for git clone)
-        environment.put("HOME", System.getProperty("user.home"));
-
-        try
-        {
-            CommandLine commandLine = new CommandLine("git");
-            commandLine.addArguments(args);
-
-            // collect output
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-            DefaultExecutor executor = new DefaultExecutor();
-            executor.setWorkingDirectory(workingDir);
-            executor.setExitValues(null);
-            executor.setStreamHandler(new PumpStreamHandler(out, System.err));
-            int exitValue = executor.execute(commandLine, environment);
-
-            return new GitResult(exitValue, out.toByteArray());
-        }
-        catch (IOException io)
-        {
-            throw new GitRemoteException(io);
-        }
     }
 
     /**
@@ -239,22 +205,9 @@ public class Git
      */
     public String writeObject(String kind, byte[] contents)
     {
-        // TODO return executePipedGit(contents, "hash-object", "-w", "--stdin", "-t",
-        // kind).get(0);
-
-        try
-        {
-            Path temp = Files.createTempFile("git", "");
-            Files.write(temp, contents);
-
-            GitResult result = executeGitCommand("hash-object", "-w", "-t", kind, temp.toAbsolutePath().toString());
-            Files.delete(temp);
-            return result.getFirstLine();
-        }
-        catch (IOException io)
-        {
-            throw new GitRemoteException(io);
-        }
+        ByteArrayInputStream in = new ByteArrayInputStream(contents);
+        GitResult result = executeGitCommand(in, "hash-object", "-w", "--stdin", "-t", kind);
+        return result.getFirstLine();
     }
 
     /**
@@ -367,5 +320,64 @@ public class Git
     public String getRemoteURL(String name)
     {
         return executeGitCommand("remote", "get-url", name).getFirstLine();
+    }
+
+    /**
+     * Executes a git command by spawning a subprocess with the given args.
+     */
+    public GitResult executeGitCommand(String... args)
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        PumpStreamHandler streamHandler = new PumpStreamHandler(out, System.err);
+        int exitValue = executeGitCommand(streamHandler, args);
+
+        return new GitResult(exitValue, out.toByteArray());
+    }
+
+    /**
+     * Executes a git command by spawning a subprocess with the given args, piping
+     * from the input stream.
+     */
+    public GitResult executeGitCommand(InputStream in, String... args)
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        PumpStreamHandler streamHandler = new PumpStreamHandler(out, System.err, in);
+        int exitValue = executeGitCommand(streamHandler, args);
+
+        return new GitResult(exitValue, out.toByteArray());
+    }
+
+    /**
+     * Executes a git command by spawning a subprocess with the given stream handler
+     * and args.
+     * 
+     * @return the exit value of the subprocess
+     */
+    private int executeGitCommand(PumpStreamHandler streamHandler, String... args)
+    {
+        Map<String, String> environment = new HashMap<>();
+        environment.put("GIT_DIR", gitDir.toString());
+
+        // also set the user home directory because this may be needed to access the
+        // global git configuration (like for git clone)
+        environment.put("HOME", System.getProperty("user.home"));
+
+        try
+        {
+            CommandLine commandLine = new CommandLine("git");
+            commandLine.addArguments(args);
+
+            DefaultExecutor executor = new DefaultExecutor();
+            executor.setWorkingDirectory(workingDir);
+            executor.setExitValues(null); // accept any without error
+            executor.setStreamHandler(streamHandler);
+            return executor.execute(commandLine, environment);
+        }
+        catch (IOException io)
+        {
+            throw new GitRemoteException(io);
+        }
     }
 }
