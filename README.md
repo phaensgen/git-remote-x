@@ -26,19 +26,32 @@ git-remote-local/install.sh
 The remote repository for a git repo can be added like this:
 
 ```
-git remote add origin local:///<baseDir>/<repoName.git>
+git remote add origin local:///<baseDir>/<repoName>
 ```
 
-The repo can then be uploaded using git push (with the setting the upstream at the first call):
+Examples:
+
+```
+git remote add origin local:///mypath/myrepo.git
+```
+
+The repo can then be uploaded using git push (with the setting it as upstream at the first call):
 
 ```
 git push --set-upstream origin master
 ```
 
+After a repository has been pushed, it can be cloned at a different location:
+
+```
+git clone local:///mypath/myrepo.git
+```
+
+
 ## git-remote-s3
 This helper stores the remote files in an AWS S3 bucket. It uses "s3://" for the URL protocol.
-The url specifies the S3 bucket name and the path in the bucket where the objects will be stored.
-The AWS credentials to access the bucket must be configured in the global git configuration for the repository.
+The URL specifies the S3 bucket name and and optional path in the bucket where the objects will be stored.
+The AWS credentials to access the bucket must be configured in the global git configuration.
 
 ### Installation
 Git needs an executable in the path with the name "git-remote-s3" in order to handle the "s3://" protocol.
@@ -50,26 +63,37 @@ git-remote-s3/install.sh
 
 ### Configuration
 In order to access the S3 bucket, the AWS credentials must be configured. For an existing repository, this could be
-done in the local configuration, however since this would not work for git clone it is better to use the global configuration:
+done in the local configuration, however since this would not work for the "git clone" command it is better to use the global configuration:
 
 ```
 git config --global s3.accesskeyid <awsAccessKeyId>
 git config --global s3.secretkey <awsSecretKey>
 git config --global s3.region <awsRegion>
-git remote add origin s3://<bucketName>/<pathInBucket>/<repoName.git>
+git remote add origin s3://<bucketName>/<pathInBucket>/<repoName>
+```
+
+Examples:
+
+```
+git config --global s3.accesskeyid ...
+git config --global s3.secretkey ...
+git config --global s3.region eu-central-1
+git remote add origin s3://mybucket/myrepo.git
 ```
 
 
 ## git-remote-s3enc
 This helper stores files in an AWS S3 bucket in an encrypted form. It uses "s3enc://" for the URL protocol.
-The url specifies the S3 bucket name and the path in the bucket where the objects will be stored.
-Anything that gets uploaded will be encrypted on client-side using AES256. This affects only the actual file contents.
-Path names are SHA1 hash codes in git anyway, so they don't represent anything secret.
+The url specifies the S3 bucket name and the optional path in the bucket where the objects will be stored.
+Anything that gets uploaded will be encrypted on the client-side using AES256. It is not necessary to activate server-side
+encryption for the bucket, as everything it contains is already encrypted.
+Encryption affects only the actual file contents. Path names are SHA1 hash codes in git anyway, so they don't represent anything secret
+and must not be encrypted additionally.
 The encryption key and the AWS credentials to access the bucket must be configured in the global git configuration for the repository.
 
 ### Configuration
 
-The configuration is similar to the S3 configuration without encryption, exception that there is an additional setting for the
+The configuration is similar to the S3 configuration above, except that there is an additional setting for the
 encryption key.
 
 ```
@@ -77,7 +101,7 @@ git config --global s3enc.accesskeyid <awsAccessKeyId>
 git config --global s3enc.secretkey <awsSecretKey>
 git config --global s3enc.region <awsRegion>
 git config --global s3enc.encryptionkey <encryptionKey>
-git remote add origin s3enc://<bucketName>/<pathInBucket>/<repoName.git>
+git remote add origin s3enc://<bucketName>/<pathInBucket>/<repoName>
 ```
 
 The encryption key is a Base64 encoded AES key (which is simply an array of 32 random bytes). To make it easier to generate such a key,
@@ -90,11 +114,12 @@ git-remote-s3enc -generateKey
 This produces a key that can be configured at git for encryption, for example like this:
 
 ```
-git config --global s3.encryptionKey $(git-remote-s3enc -generateKey)
+git config --global s3.encryptionkey $(git-remote-s3enc -generateKey)
 ```
 
-The key should also be stored at a safe place, for example in a password manager.
-
+The key should be copied to a safe place, for example in a password manager, because you will need it do decrypt things again!
+If you loose it, your bucket contents will be lost, too. 
+If you want to clone the repository at another machine, you need to configure the same encryption key there first.
 
 # Open Issues
 * support large files for s3
