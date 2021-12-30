@@ -1,6 +1,8 @@
 package sunday.git.remote;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -14,11 +16,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.InflaterInputStream;
 
 /**
- * This is the git remote helper implementation which does the communication
- * with git and controls the actual storage adapter. It will be called by the
- * Git command-line tools using the git-remote protocol.
+ * This is the git remote helper implementation which does the communication with git and controls the actual storage
+ * adapter. It will be called by the Git command-line commands (e.g. git push, git clone, git fetch, git pull and so on)
+ * which send commands in the git-remote protocol syntax. Commands from git are received via std in, responses are
+ * written to git via std out. Std err can be used for printing progress and status information.
  * 
  * @author Peter H&auml;nsgen
  */
@@ -26,11 +31,8 @@ public class GitRemote
 {
     private Git git;
     private Storage storage;
-
     private boolean firstPush;
-
     private String remoteHead;
-
     private Map<String, SHA1> remoteRefs;
 
     /**
@@ -45,8 +47,7 @@ public class GitRemote
     }
 
     /**
-     * The main loop reading the commands that git sends from standard in and
-     * executing them.
+     * The main loop reading the commands that git sends from std in and executing them.
      */
     public void repl() throws IOException
     {
@@ -115,17 +116,18 @@ public class GitRemote
     }
 
     /**
-     * Lists the refs from the remote repository, one per line.
+     * Lists the refs from the remote repository, one per line. This is used by git to calculate the difference between
+     * the local and the remote repository.
      */
     private void list()
     {
-        Collection<SHA1Reference> references = getRemoteRefs();
-        for (SHA1Reference reference : references)
+        Collection<GitSHA1Reference> references = getRemoteRefs();
+        for (GitSHA1Reference reference : references)
         {
             System.out.println(reference.toGit());
         }
 
-        SymbolicReference head = readSymbolicRef("HEAD");
+        GitSymbolicReference head = readSymbolicRef("HEAD");
         if (head != null)
         {
             System.out.println(head.toGit());
@@ -135,13 +137,12 @@ public class GitRemote
     }
 
     /**
-     * Basically the same as list, except that the caller wants to use the result to
-     * prepare a push command.
+     * Basically the same as list, except that the caller wants to use the result to prepare a push command.
      */
     private void listForPush()
     {
-        Collection<SHA1Reference> references = getRemoteRefs();
-        for (SHA1Reference reference : references)
+        Collection<GitSHA1Reference> references = getRemoteRefs();
+        for (GitSHA1Reference reference : references)
         {
             System.out.println(reference.toGit());
         }
@@ -150,7 +151,7 @@ public class GitRemote
     }
 
     /**
-     * Handle the fetch command.
+     * Handles the fetch command, which provides a name and a hash.
      */
     private void fetch(String line)
     {
@@ -182,38 +183,45 @@ public class GitRemote
             {
                 if (sha.equals(SHA1.EMPTY_TREE_HASH))
                 {
-                    // git.object_exists() returns True for the empty
+                    // git.objectExists() returns true for the empty
                     // tree hash even if it's not present in the object
                     // store. Everything will work fine in this situation,
-                    // but `git fsck` will complain if it's not present, so
+                    // but "git fsck" will complain if it's not present, so
                     // we explicitly add it to avoid that.
-                    git.writeObject("tree", new byte[0]);
+                    git.writeObject(GitObjectType.TREE, new byte[0]);
                 }
 
                 if (!git.historyExists(sha))
                 {
                     // this can only happen in the case of aborted fetches
                     // that are resumed later
-                    // self._trace('missing part of history from %s' % sha)
-                    Collection<SHA1> refs = git.getReferencedObjects(sha);
+                    // resolve them too
+                    Collection<SHA1> refs = getReferencedObjects(sha);
                     todo.addAll(refs);
                 }
             }
             else
             {
+                // new object, get it and resolve all its references
                 download(sha);
 
-                Collection<SHA1> refs = git.getReferencedObjects(sha);
+                Collection<SHA1> refs = getReferencedObjects(sha);
                 todo.addAll(refs);
             }
             done.add(sha);
         }
     }
 
+    /**
+     * Handles a push command, which may look like:
+     * 
+     * <pre>
+     * push refs/heads/master:refs/heads/master
+     * push :refs/heads/master
+     * </pre>
+     */
     private void push(String line)
     {
-        // push refs/heads/master:refs/heads/master
-        // push :refs/heads/master
         String[] args = line.split("[ :]");
         String src = args[1];
         String dst = args[2];
@@ -236,6 +244,9 @@ public class GitRemote
         }
     }
 
+    /**
+     * Writes the new HEAD ref after everything has been pushed.
+     */
     private void endPush()
     {
         if (firstPush)
@@ -246,16 +257,14 @@ public class GitRemote
     }
 
     /**
-     * Delete the ref from the remote.
-     * 
-     * @param dst the destination branch
+     * Deletes the given ref from the remote.
      */
     private void delete(String ref)
     {
-        SymbolicReference head = readSymbolicRef("HEAD");
+        GitSymbolicReference head = readSymbolicRef("HEAD");
         if ((head != null) && head.getValue().equals(ref))
         {
-            System.out.println("error cannot delete the current branch " + ref);
+            System.out.println("error " + ref + " Cannot delete the current branch.");
             return;
         }
 
@@ -266,80 +275,10 @@ public class GitRemote
     }
 
     /**
-     * Push src to dst on the remote.
+     * Pushes the given local src commit or branch to the remote branch described by dst.
      */
     private void push(String src, String dst)
     {
-        // Pushes the given local <src> commit or branch to the remote branch described
-        // by <dst>. A batch sequence of one or more push commands is terminated with a
-        // blank line (if there is only one reference to push, a single push command is
-        // followed by a blank line). For example, the following would be two batches of
-        // push, the first asking the remote-helper to push the local ref master to the
-        // remote ref master and the local HEAD to the remote branch, and the second
-        // asking to push ref foo to ref bar (forced update requested by the +).
-
-        // push +<src>:<dst>
-        // push refs/heads/master:refs/heads/master
-        // push HEAD:refs/heads/branch
-        // \n
-        // push +refs/heads/foo:refs/heads/bar
-        // \n
-
-        // When the push is complete, outputs one or more ok <dst> or error <dst> <why>?
-        // lines to indicate success or failure of each pushed ref. The status report
-        // output is terminated by a blank line. The option field <why> may be quoted in
-        // a C style string if it contains an LF.
-
-        // Similarly to fetch, push commands are sent in batches: The batch ends with a
-        // blank line, and the remote handler outputs a blank line once the push
-        // sequence is finished. It was originally published on
-        // https://www.apriorit.com/
-
-        // > push refs/heads/master:refs/heads/master
-        // > push +HEAD:refs/heads/branch
-        // >
-        // < It was originally published on https://www.apriorit.com/
-
-        // For the push command, the helper reads pairs of
-        // local_reference:remote_reference. When the local reference is empty, Git
-        // requests to delete the reference from the remote. Otherwise, the remote
-        // helper has to push changes to the remote. It was originally published on
-        // https://www.apriorit.com/
-
-        // First of all, we have to figure out whether to allow the helper to execute
-        // push if the local reference isn’t preceded with the + sign that means force
-        // upload. The helper checks whether the object remote_reference points to
-        // exists in the local database.
-
-        // If this object doesn't exist in the database, somebody has already pushed
-        // newer changes and the end user has to pull these changes first. In this case,
-        // the remote helper notifies the end user about this via stderr and exits with
-        // an error code. Also, we must check that the commit the remote reference
-        // points to is an ancestor of the newer local commit to make sure that it’s a
-        // fast-forward transition. It was originally published on
-        // https://www.apriorit.com/
-
-        // PUSH cases
-        // 1) Local reference is empty
-        // > push :refs/branch_to_remove
-        // Action: remove the given reference on remote
-
-        // 2) Force push
-        // > push + refs/heads/master:refs/head/master
-        // Action: upload objects referenced from the branch but missing on remote,
-        // update remote reference without additional checks
-        // 3) Regular push
-        // > push refs/heads/master:refs/head/master
-        // Action: perform fast-forward check: ensure that current remote reference
-        // is an ancestor of the local reference, fail otherwise;
-        // upload objects referenced from the branch but missing on remote,
-        // update remote referenc It was originally published on
-        // https://www.apriorit.com/
-
-        // rev_list = system("git rev-list --objects %s" % src)
-        // doc['type'] = system("git cat-file -t %s" % hash).strip("\n")
-        // doc['content'] = system("git cat-file %s %s" % (doc['type'],
-
         boolean force = false;
         if (src.startsWith("+"))
         {
@@ -356,32 +295,31 @@ public class GitRemote
         }
 
         SHA1 sha1 = git.getRefValue(src);
-        writeRemoteRef(sha1, dst, force);
+        writeRemoteRef(dst, sha1, force);
 
         System.out.println("ok " + dst);
-
     }
 
     /**
-     * Return the path to the given ref on the remote.
+     * Returns the path for the given ref in the remote repository.
      */
     private Path refPath(String name)
     {
         if (!name.startsWith("refs/"))
         {
-            throw new GitRemoteException("Invalid ref path: " + name);
+            throw new GitRemoteException("Invalid ref name: " + name);
         }
 
         return Path.of(name);
     }
 
     /**
-     * Return the path to the given object on the remote.
+     * Returns the path to the given object in the remote repository.
      */
     private Path objectPath(SHA1 sha1)
     {
-        // splits the path in 2 / 38 subdirs as git does to avoid huge number of objects
-        // in the same directory
+        // split the path in 2 / 38 characters for an extra subdirectory level
+        // similar to git in order to avoid huge number of objects in the same directory
         String name = sha1.toString();
         String prefix = name.substring(0, 2);
         String suffix = name.substring(2);
@@ -389,24 +327,24 @@ public class GitRemote
     }
 
     /**
-     * Upload an object to the remote.
+     * Uploads an object to the remote repository.
      */
     private void putObject(SHA1 sha1)
     {
-        byte[] content = git.encodeObject(sha1);
+        byte[] content = encodeObject(sha1);
         Path path = objectPath(sha1);
         storage.uploadFile(path, content);
     }
 
     /**
-     * Download files given in input_queue and push results to output_queue.
+     * Downloads an object from the remote repository and writes it into the local repository.
      */
     private void download(SHA1 sha1)
     {
         Path path = objectPath(sha1);
         byte[] data = storage.downloadFile(path);
 
-        SHA1 computedSha1 = new SHA1(git.decodeObject(data));
+        SHA1 computedSha1 = decodeObject(data);
         if (!computedSha1.equals(sha1))
         {
             throw new GitRemoteException("Provided and computed hashes do not match: " + sha1 + " != " + computedSha1);
@@ -414,11 +352,9 @@ public class GitRemote
     }
 
     /**
-     * Atomically update the given reference to point to the given object.
-     * Return None if there is no error, otherwise return a description of the
-     * error.
+     * Updates the given reference to point to the given object.
      */
-    private void writeRemoteRef(SHA1 newSha1, String dst, boolean force)
+    private void writeRemoteRef(String dst, SHA1 newSha1, boolean force)
     {
         Path path = refPath(dst);
 
@@ -435,7 +371,7 @@ public class GitRemote
                 boolean isFastForward = git.isAncestor(sha1, newSha1);
                 if (!isFastForward)
                 {
-                    throw new GitRemoteException("Non-fast forward, resolve this first.");
+                    throw new GitRemoteException("Not fast-forward, fetch first.");
                 }
             }
         }
@@ -444,13 +380,13 @@ public class GitRemote
     }
 
     /**
-     * Return the refs present on the remote.
+     * Returns the refs that are present on the remote repository.
      */
-    private Collection<SHA1Reference> getRemoteRefs()
+    private Collection<GitSHA1Reference> getRemoteRefs()
     {
         Collection<Path> files = storage.listFiles(Path.of("refs"));
 
-        // like:
+        // something like:
         // refs/heads/master
         // 6bdbbdcda0bbbdc57fd83bf144954c3a9f218744
 
@@ -460,13 +396,13 @@ public class GitRemote
             return Collections.emptyList();
         }
 
-        List<SHA1Reference> refs = new ArrayList<>();
+        List<GitSHA1Reference> refs = new ArrayList<>();
         for (Path path : files)
         {
             byte[] data = storage.downloadFile(path);
             String name = path.toString();
             SHA1 sha1 = new SHA1(new String(data, StandardCharsets.UTF_8).trim());
-            SHA1Reference ref = new SHA1Reference(sha1, name);
+            GitSHA1Reference ref = new GitSHA1Reference(sha1, name);
             refs.add(ref);
 
             // cache for push check
@@ -477,13 +413,9 @@ public class GitRemote
     }
 
     /**
-     * Write the given symbolic ref to the remote.
-     * Perform a compare-and-swap (using previous revision rev) if specified,
-     * otherwise perform a regular write.
-     * Return a boolean indicating whether the write was successful.
+     * Writes the given symbolic ref to the remote repository.
+     * For example, like: HEAD -> ref: refs/heads/master
      */
-    // like: .git/HEAD ref: refs/heads/master
-    // writeSymbolicRef("HEAD", remoteHead);
     private void writeSymbolicRef(String path, String ref)
     {
         String data = "ref: " + ref + "\n";
@@ -492,14 +424,164 @@ public class GitRemote
     }
 
     /**
-     * Return the revision number and content of a given symbolic ref on the remote.
-     * Return a tuple (revision, content), or None if the symbolic ref does not
-     * exist.
+     * Returns the symbolic ref from the remote repository.
      */
-    private SymbolicReference readSymbolicRef(String path)
+    private GitSymbolicReference readSymbolicRef(String path)
     {
         byte[] content = storage.downloadFile(Path.of(path));
         String ref = new String(content, StandardCharsets.UTF_8).substring("ref: ".length()).trim();
-        return new SymbolicReference(path, ref);
+        return new GitSymbolicReference(path, ref);
+    }
+
+    /**
+     * Returns the encoded contents of the object in the local repository.
+     * The encoding is the same as the encoding that git uses for loose objects.
+     */
+    private byte[] encodeObject(SHA1 sha1)
+    {
+        GitObjectType type = git.getObjectType(sha1);
+        String size = git.getObjectSize(sha1);
+        byte[] contents = git.readObject(sha1, type);
+
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
+
+        // git uses zlib compression
+        try (DeflaterOutputStream out = new DeflaterOutputStream(data))
+        {
+            String header = type.toLowerName() + ' ' + size;
+            out.write(header.getBytes(StandardCharsets.UTF_8));
+            out.write(0);
+            out.write(contents);
+        }
+        catch (IOException ex)
+        {
+            throw new GitRemoteException(ex);
+        }
+
+        return data.toByteArray();
+    }
+
+    /**
+     * Decodes the encoded object and writes it to the local repository.
+     * Returns the computed hash for the contents which represents the object id.
+     */
+    private SHA1 decodeObject(byte[] data)
+    {
+        ByteArrayOutputStream header = new ByteArrayOutputStream();
+        ByteArrayOutputStream content = new ByteArrayOutputStream();
+
+        // git uses zlib compression
+        try (InflaterInputStream in = new InflaterInputStream(new ByteArrayInputStream(data)))
+        {
+            // collect header
+            while (true)
+            {
+                int ch = in.read();
+
+                // 0 is the separator between header and content
+                if (ch <= 0)
+                {
+                    break;
+                }
+
+                header.write(ch);
+            }
+
+            // collect content
+            while (true)
+            {
+                int ch = in.read();
+                if (ch < 0)
+                {
+                    break;
+                }
+
+                content.write(ch);
+            }
+        }
+        catch (IOException ex)
+        {
+            throw new GitRemoteException(ex);
+        }
+
+        String headerString = new String(header.toByteArray(), StandardCharsets.UTF_8);
+        String[] h = headerString.split(" ");
+        GitObjectType type = GitObjectType.valueOf(h[0].toUpperCase());
+
+        return git.writeObject(type, content.toByteArray());
+    }
+
+    /**
+     * Returns the objects that are directly referenced by the given object.
+     */
+    private Collection<SHA1> getReferencedObjects(SHA1 sha1)
+    {
+        GitObjectType type = git.getObjectType(sha1);
+        if (GitObjectType.BLOB.equals(type))
+        {
+            // blob objects do not reference any other objects
+            return Collections.emptyList();
+        }
+
+        byte[] content = git.readObject(sha1, null);
+        String data = new String(content, StandardCharsets.UTF_8).trim();
+
+        List<SHA1> objs = new ArrayList<>();
+        if (GitObjectType.TAG.equals(type))
+        {
+            // tag objects reference a single object
+            String[] lines = data.split("\n");
+            String[] words = lines[0].split(" ");
+            objs.add(new SHA1(words[1]));
+        }
+        else if (GitObjectType.COMMIT.equals(type))
+        {
+            // commit objects reference a tree and zero or more parents
+            String[] lines = data.split("\n");
+            String[] words = lines[0].split(" ");
+            String tree = words[1];
+
+            objs.add(new SHA1(tree));
+
+            for (int i = 1; i < lines.length; i++)
+            {
+                String line = lines[i];
+                if (line.startsWith("parent "))
+                {
+                    String[] w = line.split(" ");
+                    objs.add(new SHA1(w[1]));
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        else if (GitObjectType.TREE.equals(type))
+        {
+            // tree objects reference zero or more trees and blobs, or submodules
+            if (data == null)
+            {
+                // empty tree
+                return Collections.emptyList();
+            }
+            String[] lines = data.split("\n");
+            // submodules have the mode "160000" and the type "commit", we filter them out
+            // because there is nothing to download
+            for (String line : lines)
+            {
+                if (!line.startsWith("160000 commit "))
+                {
+                    String[] w = line.split("\\s");
+                    objs.add(new SHA1(w[2]));
+                }
+            }
+        }
+        else
+        {
+            throw new GitRemoteException("Unexpected type: " + type);
+        }
+
+        return objs;
     }
 }

@@ -15,7 +15,7 @@ package sunday.git.remote;
  * 
  * @author Peter H&auml;nsgen
  */
-public class SymbolicReference
+public class GitSymbolicReference
 {
     private String name;
 
@@ -24,7 +24,7 @@ public class SymbolicReference
     /**
      * The constructor.
      */
-    public SymbolicReference(String name, String value)
+    public GitSymbolicReference(String name, String value)
     {
         this.name = name;
         this.value = value;

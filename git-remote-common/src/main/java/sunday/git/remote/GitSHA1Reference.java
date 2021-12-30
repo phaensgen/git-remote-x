@@ -15,7 +15,7 @@ package sunday.git.remote;
  * 
  * @author Peter H&auml;nsgen
  */
-public class SHA1Reference
+public class GitSHA1Reference
 {
     private SHA1 sha1;
     private String ref;
@@ -23,7 +23,7 @@ public class SHA1Reference
     /**
      * The constructor.
      */
-    public SHA1Reference(SHA1 sha1, String ref)
+    public GitSHA1Reference(SHA1 sha1, String ref)
     {
         this.sha1 = sha1;
         this.ref = ref;

@@ -97,11 +97,8 @@ The key should also be stored at a safe place, for example in a password manager
 
 
 # Open Issues
-* check process streaming
 * support large files for s3
 * support large files for s3enc
-* describe installation (link)
-* git build process?
 
 # Disclaimer
 This project is intended for educational purposes only. It should not be used for production use! Make sure you have a backup of your data
