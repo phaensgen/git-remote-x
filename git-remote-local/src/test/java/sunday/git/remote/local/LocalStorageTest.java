@@ -42,7 +42,7 @@ public class LocalStorageTest
         // find files
         Collection<Path> refs = storage.listFiles(Path.of("refs"));
         assertEquals(1, refs.size());
-        assertEquals("refs/heads/master", refs.iterator().next().toString());
+        assertEquals("refs/heads/master", refs.iterator().next().toString().replace('\\', '/'));
 
         // delete and find again
         storage.deleteFile(refPath);

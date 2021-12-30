@@ -327,6 +327,15 @@ public class GitRemote
     }
 
     /**
+     * Converts a path into a name with forward slashes as separators.
+     */
+    private String pathToName(Path path)
+    {
+        // on Windows, the toString method returns the wrong separator
+        return path.toString().replace('\\', '/');
+    }
+
+    /**
      * Uploads an object to the remote repository.
      */
     private void putObject(SHA1 sha1)
@@ -400,7 +409,7 @@ public class GitRemote
         for (Path path : files)
         {
             byte[] data = storage.downloadFile(path);
-            String name = path.toString();
+            String name = pathToName(path);
             SHA1 sha1 = new SHA1(new String(data, StandardCharsets.UTF_8).trim());
             GitSHA1Reference ref = new GitSHA1Reference(sha1, name);
             refs.add(ref);

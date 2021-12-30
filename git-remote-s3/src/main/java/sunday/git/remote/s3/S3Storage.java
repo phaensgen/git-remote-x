@@ -137,6 +137,7 @@ public class S3Storage implements Storage
 
     private String getKey(Path path)
     {
-        return configuration.getBaseDir().resolve(path).toString();
+        // replace backslashes in case this runs on Windows
+        return configuration.getBaseDir().resolve(path).toString().replace('\\', '/');
     }
 }
