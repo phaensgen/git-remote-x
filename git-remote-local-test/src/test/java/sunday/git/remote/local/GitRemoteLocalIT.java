@@ -19,11 +19,15 @@ import sunday.git.remote.Git;
  * 
  * @author Peter H&auml;nsgen
  */
-public class GitRemoteLocalTest
+public class GitRemoteLocalIT
 {
     @Rule
     public TemporaryFolder temp = new TemporaryFolder();
 
+    /**
+     * This test will fail on a CI system where no git-remote-local binary is
+     * present in the path, therefore it will be excluded if maven profile is "ci".
+     */
     @Test
     public void testGitRemoteLocal() throws IOException
     {
