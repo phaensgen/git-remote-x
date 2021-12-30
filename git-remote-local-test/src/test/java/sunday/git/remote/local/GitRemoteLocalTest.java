@@ -38,6 +38,10 @@ public class GitRemoteLocalTest
         assertTrue(Files.exists(testDir.toPath().resolve(Path.of(".git", "HEAD"))));
         assertTrue(Files.exists(testDir.toPath().resolve(Path.of(".git", "config"))));
 
+        // set some test identity (only needed for CI builds)
+        assertEquals(0, git.executeGitCommand("config", "user.email", "test@example.com").getExitValue());
+        assertEquals(0, git.executeGitCommand("config", "user.name", "Test User").getExitValue());
+
         // add something
         File readme = new File(testDir, "readme.txt");
         Files.writeString(readme.toPath(), "Hello World!");
