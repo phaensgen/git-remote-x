@@ -1,0 +1,6 @@
+#!/bin/bash
+#
+# This is the executable that is called by git. It must be copied or linked to a location in the path, for example
+# to /usr/local/bin. It starts the actual main Java application.
+#
+java -jar $HOME/.m2/repository/sunday/git-remote-s3enc/0.1-SNAPSHOT/git-remote-s3enc-0.1-SNAPSHOT.jar $0 $1 $2
