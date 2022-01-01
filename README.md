@@ -10,31 +10,49 @@ The remote repository to be used can be configured like:
 git remote add <remoteName> <url>
 ```
 
-### Building
+For more details about how this works see the Git documentation: 
+[https://git-scm.com/docs/gitremote-helpers](https://git-scm.com/docs/gitremote-helpers)
+
+## Building
 This is a Maven Java project, which can be built like:
 
 ```
 mvn install
 ```
 
-Java 17 is required (not code-wise, but just because its the newest).
+Java 17 is required (not code-wise, but just because its the current release).
 Note that during build some integration tests will be executed, which require git and the git-remote-x helpers on the path (see below).
 So it's a good idea to first copy the executables to a location where they can be found during the build, even if they still point
 to an invalid artifact.
 
-## git-remote-local
+To make the whole process even simpler, a make script is provided which does all of the above:
+
+```
+./make.sh
+```
+
+## Running
+After building, the artifacts are located in the local Maven repository (~/.m2). From there they will be called by the shell scripts,
+no further changes are necessary.
+
+On Windows, git comes with a git-bash console that is much more convenient than the default Windows shell and that can be used to
+run git commands, including git remote helpers. Possibly, the path locations of the shell scripts must be adjusted, depending on where the Jar files are located.
+
+
+## Git Remote Helper Implementations
+### git-remote-local
 This helper uses a directory in the local file system as remote repository. It uses "local://" for the URL protocol.
 The url specifies the path in the local file system where the objects will be stored.
 
-### Installation
+#### Installation
 Git needs an executable in the path with the name "git-remote-local" in order to handle the "local://" protocol.
-You can copy the provided script:
+You can copy the provided script to a location where it can be found in the path, for example:
 
 ```
 cp git-remote-local/git-remote-local /usr/local/bin/
 ```
 
-### Configuration
+#### Configuration
 The remote repository for an existing git repo can be added like this:
 
 ```
@@ -62,20 +80,20 @@ git clone local:///mypath/myrepo.git
 ```
 
 
-## git-remote-s3
+### git-remote-s3
 This helper stores the remote files in an AWS S3 bucket. It uses "s3://" for the URL protocol.
 The URL specifies the S3 bucket name and and optional path in the bucket where the objects will be stored.
 The AWS credentials to access the bucket must be configured in the global git configuration.
 
-### Installation
+#### Installation
 Git needs an executable in the path with the name "git-remote-s3" in order to handle the "s3://" protocol.
-You can copy the provided script:
+You can copy the provided script to a location where it can be found in the path, for example:
 
 ```
 cp git-remote-s3/git-remote-s3 /usr/local/bin/
 ```
 
-### Configuration
+#### Configuration
 In order to access the S3 bucket, the AWS credentials must be configured. For an existing repository, this could be
 done in the local configuration, however since this would not work for the "git clone" command it is better to use the global configuration:
 
@@ -96,7 +114,7 @@ git remote add origin s3://mybucket/myrepo.git
 ```
 
 
-## git-remote-s3enc
+### git-remote-s3enc
 This helper stores files in an AWS S3 bucket in an encrypted form. It uses "s3enc://" for the URL protocol.
 The URL specifies the S3 bucket name and the optional path in the bucket where the objects will be stored.
 Anything that gets uploaded will be encrypted on the client-side using AES256. It is not necessary to activate server-side
@@ -105,15 +123,15 @@ Encryption affects only the actual file contents. Path names are mostly SHA1 has
 and must not be encrypted additionally.
 The encryption key and the AWS credentials to access the bucket must be configured in the global git configuration for the repository.
 
-### Installation
+#### Installation
 Git needs an executable in the path with the name "git-remote-s3enc" in order to handle the "s3enc://" protocol.
-You can copy the provided script:
+You can copy the provided script to a location where it can be found in the path, for example:
 
 ```
 cp git-remote-s3enc/git-remote-s3enc /usr/local/bin/
 ```
 
-### Configuration
+#### Configuration
 The configuration is similar to the S3 configuration above, except that there is an additional setting for the
 encryption key.
 
@@ -142,9 +160,15 @@ The key should be backed up in a safe place, for example in a password manager, 
 If you loose it, your bucket contents will be lost, too. 
 If you want to clone the repository to another machine, you need to configure the same encryption key there first.
 
-# Open Issues
+## Open Issues
 * support large files for s3
 * support large files for s3enc
+
+# References
+This project has been inspired by other git-remote-helper implementations, in particular by
+[git-remote-dropbox](https://github.com/anishathalye/git-remote-dropbox) which is written in Python and uses Dropbox for storage.
+However, as I wanted to use S3 I chose to implement my own solution.
+
 
 # Disclaimer
 This project is intended for educational purposes only. It should not be used for production use! Make sure you have a backup of your data
