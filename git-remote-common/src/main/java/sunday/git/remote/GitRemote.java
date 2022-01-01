@@ -30,10 +30,15 @@ import java.util.zip.InflaterInputStream;
 public class GitRemote
 {
     private Git git;
+    private GitLogger logger;
     private Storage storage;
+
     private boolean firstPush;
     private String remoteHead;
     private Map<String, SHA1> remoteRefs;
+
+    private Deque<SHA1> fetchTodo;
+    private Collection<SHA1> fetchDone;
 
     /**
      * The constructor.
@@ -43,7 +48,11 @@ public class GitRemote
         this.git = git;
         this.storage = storage;
 
+        logger = new GitLogger();
+
         remoteRefs = new HashMap<>();
+        fetchTodo = new ArrayDeque<>();
+        fetchDone = new HashSet<>();
     }
 
     /**
@@ -89,13 +98,17 @@ public class GitRemote
                 {
                     fetch(line);
                 }
+                else if (line.startsWith("option"))
+                {
+                    option(line);
+                }
                 else if (line.isEmpty())
                 {
                     System.out.println();
                 }
                 else
                 {
-                    System.err.println("Unexpected command: " + line);
+                    logger.error("Unexpected command: " + line);
                     System.exit(1);
                 }
             }
@@ -112,7 +125,29 @@ public class GitRemote
         System.out.println("list");
         System.out.println("push");
         System.out.println("fetch");
+        System.out.println("option");
         System.out.println();
+    }
+
+    /**
+     * Sets options as defined in the git command. Currently, verbosity of log output can be
+     * controlled.
+     */
+    private void option(String line)
+    {
+        String[] words = line.split(" ");
+        if ("verbosity".equals(words[1]))
+        {
+            // Example:
+            // option verbosity 1
+            // 0 is silent, 1 is default, bigger is more output
+            logger.setVerbosity(Integer.parseInt(words[2]));
+            System.out.println("ok");
+        }
+        else
+        {
+            System.out.println("unsupported");
+        }
     }
 
     /**
@@ -166,15 +201,14 @@ public class GitRemote
      */
     private void fetch(SHA1 sha1)
     {
-        Deque<SHA1> todo = new ArrayDeque<>();
-        todo.push(sha1);
+        fetchTodo.push(sha1);
 
-        Collection<SHA1> done = new HashSet<>();
+        boolean changed = false;
 
-        while (!todo.isEmpty())
+        while (!fetchTodo.isEmpty())
         {
-            SHA1 sha = todo.pop();
-            if (done.contains(sha))
+            SHA1 sha = fetchTodo.pop();
+            if (fetchDone.contains(sha))
             {
                 continue;
             }
@@ -197,7 +231,7 @@ public class GitRemote
                     // that are resumed later
                     // resolve them too
                     Collection<SHA1> refs = getReferencedObjects(sha);
-                    todo.addAll(refs);
+                    fetchTodo.addAll(refs);
                 }
             }
             else
@@ -206,9 +240,24 @@ public class GitRemote
                 download(sha);
 
                 Collection<SHA1> refs = getReferencedObjects(sha);
-                todo.addAll(refs);
+                fetchTodo.addAll(refs);
             }
-            done.add(sha);
+            fetchDone.add(sha);
+            changed = true;
+
+            if (!logger.isQuiet())
+            {
+                int doneCount = fetchDone.size();
+                int totalCount = fetchTodo.size() + doneCount;
+                int percent = doneCount * 100 / totalCount;
+                logger.print("\rFetching objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
+            }
+        }
+
+        if (changed && !logger.isQuiet())
+        {
+            int doneCount = fetchDone.size();
+            logger.println("\rFetching objects: 100% (" + doneCount + " / " + doneCount + ")");
         }
     }
 
@@ -271,6 +320,11 @@ public class GitRemote
         storage.deleteFile(refPath(ref));
         remoteRefs.remove(ref);
 
+        if (!logger.isQuiet())
+        {
+            logger.println("Deleting refs: 100% (1 / 1)");
+        }
+
         System.out.println("ok " + ref);
     }
 
@@ -288,10 +342,26 @@ public class GitRemote
 
         List<SHA1> objects = git.listObjects(src, remoteRefs.values());
 
+        int doneCount = 0;
+        int totalCount = objects.size();
+
         // before updating the ref, write all objects that are referenced
         for (SHA1 sha1 : objects)
         {
+            if (!logger.isQuiet())
+            {
+                int percent = doneCount * 100 / totalCount;
+                logger.print("\rPushing objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
+            }
+
             putObject(sha1);
+
+            doneCount++;
+        }
+
+        if (!logger.isQuiet())
+        {
+            logger.println("\rPushing objects: 100% (" + doneCount + " / " + totalCount + ")");
         }
 
         SHA1 sha1 = git.getRefValue(src);
