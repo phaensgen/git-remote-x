@@ -8,6 +8,7 @@ package sunday.git.remote;
 public class GitLogger
 {
     private int verbosity;
+    private String lastProgressMessage;
 
     public void setVerbosity(int verbosity)
     {
@@ -24,26 +25,9 @@ public class GitLogger
         return verbosity == 0;
     }
 
-    /**
-     * Writes a message unless its disabled.
-     */
-    public void print(String message)
+    public boolean isDebug()
     {
-        if (!isQuiet())
-        {
-            System.err.print(message);
-        }
-    }
-
-    /**
-     * Writes a message unless its disabled.
-     */
-    public void println(String message)
-    {
-        if (!isQuiet())
-        {
-            System.err.println(message);
-        }
+        return verbosity > 1;
     }
 
     /**
@@ -51,6 +35,7 @@ public class GitLogger
      */
     public void error(String message)
     {
+        clearProgress();
         System.err.println(message);
     }
 
@@ -59,8 +44,9 @@ public class GitLogger
      */
     public void info(String message)
     {
-        if (verbosity == 1)
+        if (verbosity >= 1)
         {
+            clearProgress();
             System.err.println(message);
         }
     }
@@ -72,7 +58,45 @@ public class GitLogger
     {
         if (verbosity > 1)
         {
+            clearProgress();
             System.err.println(message);
+        }
+    }
+
+    /**
+     * Writes a progress message, e.g. moves the cursor back before writing the next progress so that it will be shown
+     * at the same position on the console.
+     */
+    public void progress(String message)
+    {
+        if (lastProgressMessage != null)
+        {
+            if (lastProgressMessage.length() < message.length())
+            {
+                // cursor back
+                System.err.print("\r");
+
+                // clear last message (which is longer) by printing spaces
+                for (int i = 0; i < lastProgressMessage.length(); i++)
+                {
+                    System.err.print(" ");
+                }
+            }
+
+            // cursor back for progress on same line
+            System.err.print("\r");
+        }
+
+        System.err.print(message);
+        lastProgressMessage = message;
+    }
+
+    private void clearProgress()
+    {
+        if (lastProgressMessage != null)
+        {
+            lastProgressMessage = null;
+            System.err.println();
         }
     }
 }

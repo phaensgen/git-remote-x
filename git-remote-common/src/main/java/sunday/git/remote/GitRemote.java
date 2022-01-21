@@ -77,39 +77,46 @@ public class GitRemote
                     break;
                 }
 
-                if ("capabilities".equals(line))
+                try
                 {
-                    capabilities();
+                    if ("capabilities".equals(line))
+                    {
+                        capabilities();
+                    }
+                    else if ("list".equals(line))
+                    {
+                        list();
+                    }
+                    else if ("list for-push".equals(line))
+                    {
+                        listForPush();
+                    }
+                    else if (line.startsWith("push "))
+                    {
+                        push(line);
+                        hasPushed = true;
+                    }
+                    else if (line.startsWith("fetch "))
+                    {
+                        fetch(line);
+                    }
+                    else if (line.startsWith("option"))
+                    {
+                        option(line);
+                    }
+                    else if (line.isEmpty())
+                    {
+                        System.out.println();
+                    }
+                    else
+                    {
+                        logger.error("Unexpected command: " + line);
+                        System.exit(1);
+                    }
                 }
-                else if ("list".equals(line))
+                catch (GitRemoteException ex)
                 {
-                    list();
-                }
-                else if ("list for-push".equals(line))
-                {
-                    listForPush();
-                }
-                else if (line.startsWith("push "))
-                {
-                    push(line);
-                    hasPushed = true;
-                }
-                else if (line.startsWith("fetch "))
-                {
-                    fetch(line);
-                }
-                else if (line.startsWith("option"))
-                {
-                    option(line);
-                }
-                else if (line.isEmpty())
-                {
-                    System.out.println();
-                }
-                else
-                {
-                    logger.error("Unexpected command: " + line);
-                    System.exit(1);
+                    System.err.println(ex.getMessage());
                 }
             }
         }
@@ -237,7 +244,7 @@ public class GitRemote
             else
             {
                 // new object, get it and resolve all its references
-                download(sha);
+                downloadObject(sha);
 
                 Collection<SHA1> refs = getReferencedObjects(sha);
                 fetchTodo.addAll(refs);
@@ -245,19 +252,17 @@ public class GitRemote
             fetchDone.add(sha);
             changed = true;
 
-            if (!logger.isQuiet())
-            {
-                int doneCount = fetchDone.size();
-                int totalCount = fetchTodo.size() + doneCount;
-                int percent = doneCount * 100 / totalCount;
-                logger.print("\rFetching objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
-            }
+            int doneCount = fetchDone.size();
+            int totalCount = fetchTodo.size() + doneCount;
+            int percent = doneCount * 100 / totalCount;
+            logger.progress("Fetching objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
         }
 
-        if (changed && !logger.isQuiet())
+        if (changed)
         {
             int doneCount = fetchDone.size();
-            logger.println("\rFetching objects: 100% (" + doneCount + " / " + doneCount + ")");
+            int totalCount = fetchTodo.size() + doneCount;
+            logger.progress("Fetching objects: 100% (" + doneCount + " / " + totalCount + ")");
         }
     }
 
@@ -317,13 +322,12 @@ public class GitRemote
             return;
         }
 
+        logger.debug("Deleting ref: " + ref);
+
         storage.deleteFile(refPath(ref));
         remoteRefs.remove(ref);
 
-        if (!logger.isQuiet())
-        {
-            logger.println("Deleting refs: 100% (1 / 1)");
-        }
+        logger.progress("Deleting refs: 100% (1 / 1)");
 
         System.out.println("ok " + ref);
     }
@@ -333,6 +337,8 @@ public class GitRemote
      */
     private void push(String src, String dst)
     {
+        logger.debug("Pushing from " + src + " to " + dst + "...");
+
         boolean force = false;
         if (src.startsWith("+"))
         {
@@ -340,7 +346,12 @@ public class GitRemote
             force = true;
         }
 
-        List<SHA1> objects = git.listObjects(src, remoteRefs.values());
+        Collection<SHA1> excludes = new ArrayList<>();
+        excludes.addAll(remoteRefs.values());
+
+        List<SHA1> objects = git.listObjects(src, excludes);
+
+        logger.debug("Found " + objects.size() + " objects, excluding " + excludes.size() + " remote refs.");
 
         int doneCount = 0;
         int totalCount = objects.size();
@@ -348,21 +359,15 @@ public class GitRemote
         // before updating the ref, write all objects that are referenced
         for (SHA1 sha1 : objects)
         {
-            if (!logger.isQuiet())
-            {
-                int percent = doneCount * 100 / totalCount;
-                logger.print("\rPushing objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
-            }
+            int percent = doneCount * 100 / totalCount;
+            logger.progress("Pushing objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
 
-            putObject(sha1);
+            uploadObject(sha1);
 
             doneCount++;
         }
 
-        if (!logger.isQuiet())
-        {
-            logger.println("\rPushing objects: 100% (" + doneCount + " / " + totalCount + ")");
-        }
+        logger.progress("Pushing objects: 100% (" + doneCount + " / " + totalCount + ")");
 
         SHA1 sha1 = git.getRefValue(src);
         writeRemoteRef(dst, sha1, force);
@@ -408,8 +413,10 @@ public class GitRemote
     /**
      * Uploads an object to the remote repository.
      */
-    private void putObject(SHA1 sha1)
+    private void uploadObject(SHA1 sha1)
     {
+        logger.debug("Uploading object: " + sha1);
+
         byte[] content = encodeObject(sha1);
         Path path = objectPath(sha1);
         storage.uploadFile(path, content);
@@ -418,8 +425,10 @@ public class GitRemote
     /**
      * Downloads an object from the remote repository and writes it into the local repository.
      */
-    private void download(SHA1 sha1)
+    private void downloadObject(SHA1 sha1)
     {
+        logger.debug("Downloading object: " + sha1);
+
         Path path = objectPath(sha1);
         byte[] data = storage.downloadFile(path);
 
@@ -436,6 +445,8 @@ public class GitRemote
     private void writeRemoteRef(String dst, SHA1 newSha1, boolean force)
     {
         Path path = refPath(dst);
+
+        logger.debug("Uploading ref: " + path);
 
         if (!force)
         {
@@ -463,6 +474,8 @@ public class GitRemote
      */
     private Collection<GitSHA1Reference> getRemoteRefs()
     {
+        logger.debug("Getting remote refs...");
+
         Collection<Path> files = storage.listFiles(Path.of("refs"));
 
         // something like:
@@ -472,6 +485,8 @@ public class GitRemote
         if (files.isEmpty())
         {
             firstPush = true;
+
+            logger.debug("No refs found, first push.");
             return Collections.emptyList();
         }
 
@@ -484,9 +499,12 @@ public class GitRemote
             GitSHA1Reference ref = new GitSHA1Reference(sha1, name);
             refs.add(ref);
 
-            // cache for push check
+            // cache for push check, like:
+            // refs/heads/master -> 6bdbbdcda0bbbdc57fd83bf144954c3a9f218744
             remoteRefs.put(name, sha1);
         }
+
+        logger.debug(refs.size() + " refs found.");
 
         return refs;
     }
@@ -497,6 +515,8 @@ public class GitRemote
      */
     private void writeSymbolicRef(String path, String ref)
     {
+        logger.debug("Uploading symbolic ref: " + path);
+
         String data = "ref: " + ref + "\n";
         byte[] content = data.getBytes(StandardCharsets.UTF_8);
         storage.uploadFile(Path.of(path), content);
@@ -507,6 +527,8 @@ public class GitRemote
      */
     private GitSymbolicReference readSymbolicRef(String path)
     {
+        logger.debug("Downloading symbolic ref: " + path);
+
         byte[] content = storage.downloadFile(Path.of(path));
         String ref = new String(content, StandardCharsets.UTF_8).substring("ref: ".length()).trim();
         return new GitSymbolicReference(path, ref);

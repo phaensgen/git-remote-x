@@ -42,7 +42,7 @@ run git commands, including git remote helpers. Possibly, the path locations of 
 ## Git Remote Helper Implementations
 ### git-remote-local
 This helper uses a directory in the local file system as remote repository. It uses "local://" for the URL protocol.
-The url specifies the path in the local file system where the objects will be stored.
+The URL specifies the path in the local file system where the objects will be stored.
 
 #### Installation
 Git needs an executable in the path with the name "git-remote-local" in order to handle the "local://" protocol.
@@ -161,6 +161,8 @@ If you loose it, your bucket contents will be lost, too.
 If you want to clone the repository to another machine, you need to configure the same encryption key there first.
 
 ## Open Issues
+* parallel uploads
+* parallel downloads
 * support large files for s3
 * support large files for s3enc
 
