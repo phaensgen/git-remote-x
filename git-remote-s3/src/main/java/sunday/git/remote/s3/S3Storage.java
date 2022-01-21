@@ -17,6 +17,7 @@ import com.amazonaws.services.s3.model.ListObjectsV2Request;
 import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 import sunday.git.remote.GitRemoteException;
@@ -31,12 +32,16 @@ public class S3Storage implements Storage
 {
     private S3Configuration configuration;
 
+    private AmazonS3 s3;
+
     /**
      * The constructor.
      */
     public S3Storage(S3Configuration configuration)
     {
         this.configuration = configuration;
+
+        s3 = createClient(configuration);
     }
 
     @Override
@@ -44,8 +49,6 @@ public class S3Storage implements Storage
     {
         String bucket = configuration.getBucketName();
         String key = getKey(path);
-
-        AmazonS3 s3 = createClient();
 
         ObjectMetadata metaData = new ObjectMetadata();
         metaData.setContentLength(content.length);
@@ -59,12 +62,11 @@ public class S3Storage implements Storage
         String bucketName = configuration.getBucketName();
         String key = getKey(path);
 
-        try
-        {
-            AmazonS3 s3 = createClient();
+        S3Object o = s3.getObject(bucketName, key);
 
-            S3Object o = s3.getObject(bucketName, key);
-            return o.getObjectContent().readAllBytes();
+        try (S3ObjectInputStream in = o.getObjectContent())
+        {
+            return in.readAllBytes();
         }
         catch (AmazonS3Exception ex)
         {
@@ -87,7 +89,6 @@ public class S3Storage implements Storage
         String bucketName = configuration.getBucketName();
         String key = getKey(path);
 
-        AmazonS3 s3 = createClient();
         s3.deleteObject(bucketName, key);
     }
 
@@ -98,8 +99,6 @@ public class S3Storage implements Storage
         String key = getKey(path);
 
         List<Path> files = new ArrayList<>();
-
-        AmazonS3 s3 = createClient();
 
         ListObjectsV2Request request = new ListObjectsV2Request();
         request.setBucketName(bucketName);
@@ -125,7 +124,7 @@ public class S3Storage implements Storage
         return files;
     }
 
-    private AmazonS3 createClient()
+    private AmazonS3 createClient(S3Configuration configuration)
     {
         String region = configuration.getRegion();
 
@@ -137,7 +136,7 @@ public class S3Storage implements Storage
 
     private String getKey(Path path)
     {
-        // replace backslashes in case this runs on Windows
+        // normalize backslashes in case this runs on Windows
         return configuration.getBaseDir().resolve(path).toString().replace('\\', '/');
     }
 }
