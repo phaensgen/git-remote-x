@@ -33,7 +33,7 @@ public class GitLogger
     /**
      * Writes an error message no matter what verbosity is set.
      */
-    public void error(String message)
+    public synchronized void error(String message)
     {
         clearProgress();
         System.err.println(message);
@@ -42,7 +42,7 @@ public class GitLogger
     /**
      * Writes a message if the default verbosity is set.
      */
-    public void info(String message)
+    public synchronized void info(String message)
     {
         if (verbosity >= 1)
         {
@@ -54,7 +54,7 @@ public class GitLogger
     /**
      * Writes a message if higher verbosity is set with -v.
      */
-    public void debug(String message)
+    public synchronized void debug(String message)
     {
         if (verbosity > 1)
         {
@@ -67,7 +67,7 @@ public class GitLogger
      * Writes a progress message, e.g. moves the cursor back before writing the next progress so that it will be shown
      * at the same position on the console.
      */
-    public void progress(String message)
+    public synchronized void progress(String message)
     {
         if (lastProgressMessage != null)
         {

@@ -16,6 +16,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -29,6 +33,8 @@ import java.util.zip.InflaterInputStream;
  */
 public class GitRemote
 {
+    private static final int MAX_THREADS = 8;
+
     private Git git;
     private GitLogger logger;
     private Storage storage;
@@ -49,6 +55,8 @@ public class GitRemote
     private Deque<SHA1> fetchTodo;
     private Collection<SHA1> fetchDone;
 
+    private ExecutorService threadPool;
+
     /**
      * The constructor.
      */
@@ -64,6 +72,8 @@ public class GitRemote
 
         fetchTodo = new ArrayDeque<>();
         fetchDone = new HashSet<>();
+
+        threadPool = Executors.newFixedThreadPool(MAX_THREADS);
     }
 
     /**
@@ -368,20 +378,35 @@ public class GitRemote
 
         logger.debug("Found " + objects.size() + " objects, excluding " + excludes.size() + " remote refs.");
 
+        Deque<Future<?>> tasks = new ArrayDeque<>();
+
+        logger.debug("Using " + MAX_THREADS + " threads.");
+
+        // before updating the ref, write all objects that are referenced
+        // schedule upload tasks
+        for (SHA1 sha1 : objects)
+        {
+            tasks.add(threadPool.submit(new UploadObject(sha1)));
+        }
+
         int doneCount = 0;
         int totalCount = objects.size();
 
-        // before updating the ref, write all objects that are referenced
-        for (SHA1 sha1 : objects)
+        // wait until all of them have finished
+        while (!tasks.isEmpty())
         {
+            try
+            {
+                Future<?> task = tasks.removeFirst();
+                task.get();
+            }
+            catch (InterruptedException | ExecutionException e)
+            {
+                throw new GitRemoteException(e);
+            }
+
             int percent = doneCount * 100 / totalCount;
             logger.progress("Pushing objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
-
-            // skip objects that may have been uploaded earlier in failed push
-            if (!objectExists(sha1))
-            {
-                uploadObject(sha1);
-            }
 
             doneCount++;
         }
@@ -724,5 +749,28 @@ public class GitRemote
         }
 
         return objs;
+    }
+
+    class UploadObject implements Runnable
+    {
+        private SHA1 sha1;
+
+        /**
+         * The constructor.
+         */
+        public UploadObject(SHA1 sha1)
+        {
+            this.sha1 = sha1;
+        }
+
+        @Override
+        public void run()
+        {
+            // skip objects that may have been uploaded earlier in failed push
+            if (!objectExists(sha1))
+            {
+                uploadObject(sha1);
+            }
+        }
     }
 }
