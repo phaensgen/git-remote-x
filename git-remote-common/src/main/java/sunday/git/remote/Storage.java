@@ -11,9 +11,13 @@ import java.util.Collection;
 public interface Storage
 {
     /**
+     * Checks whether the file with the given path already exists in the repository.
+     */
+    boolean fileExists(Path path);
+
+    /**
      * Upload new contents to the storage or overwrite existing content with the
-     * same
-     * path. The path is the relative path within the repository, e.g. it may be
+     * same path. The path is the relative path within the repository, e.g. it may be
      * appended to some base path as configured in the repository URL.
      */
     void uploadFile(Path path, byte[] contents);

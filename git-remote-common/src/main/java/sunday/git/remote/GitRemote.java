@@ -377,7 +377,11 @@ public class GitRemote
             int percent = doneCount * 100 / totalCount;
             logger.progress("Pushing objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
 
-            uploadObject(sha1);
+            // skip objects that may have been uploaded earlier in failed push
+            if (!objectExists(sha1))
+            {
+                uploadObject(sha1);
+            }
 
             doneCount++;
         }
@@ -424,6 +428,26 @@ public class GitRemote
     {
         // on Windows, the toString method returns the wrong separator
         return path.toString().replace('\\', '/');
+    }
+
+    /**
+     * Checks if the object already exists at the remote repository.
+     */
+    private boolean objectExists(SHA1 sha1)
+    {
+        Path path = objectPath(sha1);
+        boolean exists = storage.fileExists(path);
+
+        if (exists)
+        {
+            logger.debug("Object already exists: " + sha1);
+        }
+        else
+        {
+            logger.debug("Object does not exist yet: " + sha1);
+        }
+
+        return exists;
     }
 
     /**

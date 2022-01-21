@@ -32,6 +32,13 @@ public class LocalStorage implements Storage
     }
 
     @Override
+    public boolean fileExists(Path path)
+    {
+        Path filePath = baseDir.resolve(path);
+        return Files.exists(filePath);
+    }
+
+    @Override
     public void uploadFile(Path path, byte[] content)
     {
         Path filePath = baseDir.resolve(path);

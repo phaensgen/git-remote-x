@@ -45,15 +45,24 @@ public class S3Storage implements Storage
     }
 
     @Override
+    public boolean fileExists(Path path)
+    {
+        String bucketName = configuration.getBucketName();
+        String key = getKey(path);
+
+        return s3.doesObjectExist(bucketName, key);
+    }
+
+    @Override
     public void uploadFile(Path path, byte[] content)
     {
-        String bucket = configuration.getBucketName();
+        String bucketName = configuration.getBucketName();
         String key = getKey(path);
 
         ObjectMetadata metaData = new ObjectMetadata();
         metaData.setContentLength(content.length);
 
-        s3.putObject(bucket, key, new ByteArrayInputStream(content), metaData);
+        s3.putObject(bucketName, key, new ByteArrayInputStream(content), metaData);
     }
 
     @Override
