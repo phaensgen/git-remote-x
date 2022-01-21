@@ -35,7 +35,16 @@ public class GitRemote
 
     private boolean firstPush;
     private String remoteHead;
+
+    /**
+     * A cache for the referenced object ids of remote refs, key is like "refs/heads/master".
+     */
     private Map<String, SHA1> remoteRefs;
+
+    /**
+     * A cache for referenced objects that have been pushed, key is like "refs/heads/master".
+     */
+    private Map<String, SHA1> pushed;
 
     private Deque<SHA1> fetchTodo;
     private Collection<SHA1> fetchDone;
@@ -51,6 +60,8 @@ public class GitRemote
         logger = new GitLogger();
 
         remoteRefs = new HashMap<>();
+        pushed = new HashMap<>();
+
         fetchTodo = new ArrayDeque<>();
         fetchDone = new HashSet<>();
     }
@@ -312,6 +323,8 @@ public class GitRemote
 
     /**
      * Deletes the given ref from the remote.
+     * 
+     * @param ref a ref like "refs/heads/mybranch"
      */
     private void delete(String ref)
     {
@@ -326,6 +339,7 @@ public class GitRemote
 
         storage.deleteFile(refPath(ref));
         remoteRefs.remove(ref);
+        pushed.remove(ref);
 
         logger.progress("Deleting refs: 100% (1 / 1)");
 
@@ -348,6 +362,7 @@ public class GitRemote
 
         Collection<SHA1> excludes = new ArrayList<>();
         excludes.addAll(remoteRefs.values());
+        excludes.addAll(pushed.values());
 
         List<SHA1> objects = git.listObjects(src, excludes);
 
@@ -371,6 +386,7 @@ public class GitRemote
 
         SHA1 sha1 = git.getRefValue(src);
         writeRemoteRef(dst, sha1, force);
+        pushed.put(dst, sha1);
 
         System.out.println("ok " + dst);
     }
