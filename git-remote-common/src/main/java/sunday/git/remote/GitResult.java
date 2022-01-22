@@ -13,9 +13,18 @@ public class GitResult
     /**
      * The constructor.
      */
-    public GitResult(int exitValue, byte[] output)
+    public GitResult(int exitValue)
     {
         this.exitValue = exitValue;
+    }
+
+    /**
+     * The constructor.
+     */
+    public GitResult(int exitValue, byte[] output)
+    {
+        this(exitValue);
+
         this.output = output;
     }
 
@@ -45,7 +54,7 @@ public class GitResult
      */
     public String getFirstLine()
     {
-        return getLines()[0];
+        return output != null ? getLines()[0] : null;
     }
 
     /**
@@ -53,6 +62,11 @@ public class GitResult
      */
     public String[] getLines()
     {
+        if (output == null)
+        {
+            return null;
+        }
+
         String s = new String(output);
         return s.split("\\n");
     }

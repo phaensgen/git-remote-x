@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -122,6 +123,22 @@ public class Git
     }
 
     /**
+     * Copies the contents of the object to the provided output stream.
+     */
+    public void copyObject(SHA1 sha1, GitObjectType type, OutputStream out)
+    {
+        if (type != null)
+        {
+            executeGitCommand(out, "cat-file", type.toLowerName(), sha1.toString());
+        }
+        else
+        {
+            // if type is unknown return a pretty-printed representation of the object.
+            executeGitCommand(out, "cat-file", "-p", sha1.toString());
+        }
+    }
+
+    /**
      * Writes an object to the database and returns its content hash.
      */
     public SHA1 writeObject(GitObjectType type, byte[] contents)
@@ -197,6 +214,18 @@ public class Git
         int exitValue = executeGitCommand(streamHandler, args);
 
         return new GitResult(exitValue, out.toByteArray());
+    }
+
+    /**
+     * Executes a git command by spawning a subprocess with the given args, piping
+     * to the output stream.
+     */
+    public GitResult executeGitCommand(OutputStream out, String... args)
+    {
+        PumpStreamHandler streamHandler = new PumpStreamHandler(out, System.err);
+        int exitValue = executeGitCommand(streamHandler, args);
+
+        return new GitResult(exitValue);
     }
 
     /**

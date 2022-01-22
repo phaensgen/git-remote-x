@@ -1,6 +1,7 @@
 package sunday.git.remote.s3;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,6 +52,15 @@ public class S3Storage implements Storage
         String key = getKey(path);
 
         return s3.doesObjectExist(bucketName, key);
+    }
+
+    @Override
+    public void uploadFile(Path path, File file)
+    {
+        String bucketName = configuration.getBucketName();
+        String key = getKey(path);
+
+        s3.putObject(bucketName, key, file);
     }
 
     @Override

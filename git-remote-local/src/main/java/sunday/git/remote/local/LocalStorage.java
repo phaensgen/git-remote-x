@@ -1,5 +1,6 @@
 package sunday.git.remote.local;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -36,6 +37,22 @@ public class LocalStorage implements Storage
     {
         Path filePath = baseDir.resolve(path);
         return Files.exists(filePath);
+    }
+
+    @Override
+    public void uploadFile(Path path, File file)
+    {
+        Path filePath = baseDir.resolve(path);
+
+        try
+        {
+            Files.createDirectories(filePath.getParent());
+            Files.copy(file.toPath(), filePath);
+        }
+        catch (IOException io)
+        {
+            throw new GitRemoteException(io);
+        }
     }
 
     @Override

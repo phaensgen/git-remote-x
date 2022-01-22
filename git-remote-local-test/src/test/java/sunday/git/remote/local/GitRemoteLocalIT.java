@@ -47,12 +47,16 @@ public class GitRemoteLocalIT
         assertEquals(0, git1.executeGitCommand("config", "user.email", "test@example.com").getExitValue());
         assertEquals(0, git1.executeGitCommand("config", "user.name", "Test User").getExitValue());
 
-        // add something
+        // add a small file
         File testFile11 = new File(test1Dir, "file1.txt");
         Files.writeString(testFile11.toPath(), "File1");
 
-        // commit it
-        assertEquals(0, git1.executeGitCommand("add", testFile11.getName()).getExitValue());
+        // and a large file
+        File testLargeFile1 = new File(test1Dir, "largeFile.txt");
+        Files.write(testLargeFile1.toPath(), new byte[123 * 1024 * 1024]);
+
+        // commit them
+        assertEquals(0, git1.executeGitCommand("add", testFile11.getName(), testLargeFile1.getName()).getExitValue());
         assertEquals(0, git1.executeGitCommand("commit", "-m", "'Initial commit'").getExitValue());
 
         // create a new file storage
@@ -80,9 +84,12 @@ public class GitRemoteLocalIT
         // now create context for running commands within the cloned repo
         Git git2 = new Git(test2Dir, test2GitDir);
 
-        // inspect checked out file
+        // inspect checked out files
         File testFile21 = new File(test2Dir, "file1.txt");
         assertFileContains("File1", testFile21);
+
+        File testLargeFile2 = new File(test2Dir, "largeFile.txt");
+        assertEquals(123 * 1024 * 1024, testLargeFile2.length());
 
         // shouldn't do anything, because we are up-to-date
         assertEquals(0, git2.executeGitCommand("push", "-v").getExitValue());

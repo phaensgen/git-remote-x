@@ -1,5 +1,6 @@
 package sunday.git.remote;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
 
@@ -16,9 +17,15 @@ public interface Storage
     boolean fileExists(Path path);
 
     /**
-     * Upload new contents to the storage or overwrite existing content with the
-     * same path. The path is the relative path within the repository, e.g. it may be
-     * appended to some base path as configured in the repository URL.
+     * Upload the given file to the storage. Existing content with the same path is overwritten. The path is the
+     * relative path within the repository, e.g. it may be appended to some base path as configured in the repository
+     * URL.
+     */
+    void uploadFile(Path path, File file);
+
+    /**
+     * Upload new contents to the storage. Existing content with the same path is overwritten.The path is the relative
+     * path within the repository, e.g. it may be appended to some base path as configured in the repository URL.
      */
     void uploadFile(Path path, byte[] contents);
 

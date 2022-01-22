@@ -1,8 +1,11 @@
 package sunday.git.remote;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -482,9 +485,27 @@ public class GitRemote
     {
         logger.debug("Uploading object: " + sha1);
 
-        byte[] content = encodeObject(sha1);
         Path path = objectPath(sha1);
-        storage.uploadFile(path, content);
+
+        GitObjectType type = git.getObjectType(sha1);
+        String size = git.getObjectSize(sha1);
+
+        // large files that don't fit into memory need special handling
+        long length = Long.parseLong(size);
+        if (length > 100 * 1024 * 1024)
+        {
+            logger.debug("Using large file handling: " + sha1 + " (" + length + " bytes)");
+
+            File temp = encodeLargeObject(sha1, type, size);
+
+            storage.uploadFile(path, temp);
+            temp.delete();
+        }
+        else
+        {
+            byte[] content = encodeObject(sha1, type, size);
+            storage.uploadFile(path, content);
+        }
     }
 
     /**
@@ -603,12 +624,8 @@ public class GitRemote
      * Returns the encoded contents of the object in the local repository.
      * The encoding is the same as the encoding that git uses for loose objects.
      */
-    private byte[] encodeObject(SHA1 sha1)
+    private byte[] encodeObject(SHA1 sha1, GitObjectType type, String size)
     {
-        GitObjectType type = git.getObjectType(sha1);
-        String size = git.getObjectSize(sha1);
-        byte[] contents = git.readObject(sha1, type);
-
         ByteArrayOutputStream data = new ByteArrayOutputStream();
 
         // git uses zlib compression
@@ -617,6 +634,9 @@ public class GitRemote
             String header = type.toLowerName() + ' ' + size;
             out.write(header.getBytes(StandardCharsets.UTF_8));
             out.write(0);
+
+            // read small files directly into memory
+            byte[] contents = git.readObject(sha1, type);
             out.write(contents);
         }
         catch (IOException ex)
@@ -625,6 +645,37 @@ public class GitRemote
         }
 
         return data.toByteArray();
+    }
+
+    /**
+     * Returns a temporary file with the encoded contents of the object in the local repository.
+     * The encoding is the same as the encoding that git uses for loose objects.
+     */
+    private File encodeLargeObject(SHA1 sha1, GitObjectType type, String size)
+    {
+        try
+        {
+            // prepare large uploads in a temporary file
+            File temp = File.createTempFile("gitremotex", ".obj");
+
+            // git uses zlib compression
+            try (DeflaterOutputStream out = new DeflaterOutputStream(
+                    new BufferedOutputStream(new FileOutputStream(temp))))
+            {
+                String header = type.toLowerName() + ' ' + size;
+                out.write(header.getBytes(StandardCharsets.UTF_8));
+                out.write(0);
+
+                // append contents from git object
+                git.copyObject(sha1, type, out);
+            }
+
+            return temp;
+        }
+        catch (IOException ex)
+        {
+            throw new GitRemoteException(ex);
+        }
     }
 
     /**
@@ -751,6 +802,11 @@ public class GitRemote
         return objs;
     }
 
+    /**
+     * A task for doing an upload in a concurrent thread.
+     * 
+     * @author Peter H&auml;nsgen
+     */
     class UploadObject implements Runnable
     {
         private SHA1 sha1;
