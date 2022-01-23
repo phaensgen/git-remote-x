@@ -43,7 +43,7 @@ public class GitRemoteS3Enc
         }
         // helper method to manually upload objects, useful for repairing broken uploads
         // git-remote-s3enc -upload <sha1> <url>
-        else if ((args.length == 4) && "-upload".equals(args[1]))
+        else if ((args.length == 4) && "-uploadObject".equals(args[1]))
         {
             sha1 = args[2];
             url = args[3];
@@ -58,7 +58,7 @@ public class GitRemoteS3Enc
         {
             System.err.println("Usage: git-remote-s3enc <remote> <url>");
             System.err.println("Usage: git-remote-s3enc -generateKey");
-            System.err.println("Usage: git-remote-s3enc -upload <sha1> <url>");
+            System.err.println("Usage: git-remote-s3enc -uploadObject <sha1> <url>");
             System.exit(1);
         }
 
@@ -69,6 +69,10 @@ public class GitRemoteS3Enc
 
         // this is passed implicitly by git
         String gitDir = System.getenv("GIT_DIR");
+        if (gitDir == null)
+        {
+            gitDir = ".git";
+        }
 
         S3EncConfiguration configuration = new S3EncConfiguration();
 
