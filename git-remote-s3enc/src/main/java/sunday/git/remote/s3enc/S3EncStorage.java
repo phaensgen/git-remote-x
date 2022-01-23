@@ -1,9 +1,20 @@
 package sunday.git.remote.s3enc;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Path;
 
 import javax.crypto.SecretKey;
 
+import com.amazonaws.util.IOUtils;
+
+import sunday.git.remote.GitRemoteException;
 import sunday.git.remote.s3.S3Storage;
 
 /**
@@ -28,6 +39,32 @@ public class S3EncStorage extends S3Storage
 
         encryptionUtils = new EncryptionUtils();
         secretKey = encryptionUtils.decodeKey(configuration.getEncryptionKey());
+    }
+
+    /**
+     * Uploads the given file after encryption.
+     */
+    @Override
+    public void uploadFile(Path path, File file)
+    {
+        try
+        {
+            File encFile = File.createTempFile("gitremotex", ".s3enc");
+
+            try (InputStream in = encryptionUtils.encrypt(new BufferedInputStream(new FileInputStream(file)),
+                    secretKey); OutputStream out = new BufferedOutputStream(new FileOutputStream(encFile)))
+            {
+                IOUtils.copy(in, out);
+            }
+
+            super.uploadFile(path, encFile);
+
+            encFile.delete();
+        }
+        catch (IOException io)
+        {
+            throw new GitRemoteException(io);
+        }
     }
 
     @Override

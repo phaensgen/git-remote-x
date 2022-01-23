@@ -481,7 +481,7 @@ public class GitRemote
     /**
      * Uploads an object to the remote repository.
      */
-    private void uploadObject(SHA1 sha1)
+    public void uploadObject(SHA1 sha1)
     {
         logger.debug("Uploading object: " + sha1);
 

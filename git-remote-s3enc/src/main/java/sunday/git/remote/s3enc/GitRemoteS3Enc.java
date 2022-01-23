@@ -8,6 +8,7 @@ import javax.crypto.SecretKey;
 
 import sunday.git.remote.Git;
 import sunday.git.remote.GitRemote;
+import sunday.git.remote.SHA1;
 
 /**
  * This git remote helper implementation stores contents in an encrypted AWS S3
@@ -25,6 +26,11 @@ public class GitRemoteS3Enc
 {
     public static void main(String[] args) throws IOException
     {
+        String url = null;
+        String sha1 = null;
+
+        // helper method to generate an encryption key
+        // git-remote-s3enc -generateKey
         if ((args.length == 2) && "-generateKey".equals(args[1]))
         {
             EncryptionUtils encryptionUtils = new EncryptionUtils();
@@ -35,15 +41,27 @@ public class GitRemoteS3Enc
 
             return;
         }
-
-        if (args.length != 3)
+        // helper method to manually upload objects, useful for repairing broken uploads
+        // git-remote-s3enc -upload <sha1> <url>
+        else if ((args.length == 4) && "-upload".equals(args[1]))
+        {
+            sha1 = args[2];
+            url = args[3];
+        }
+        // regular git interface when using a remote repository
+        // git-remote-s3enc <remote> <url>
+        else if (args.length == 3)
+        {
+            url = args[2];
+        }
+        else
         {
             System.err.println("Usage: git-remote-s3enc <remote> <url>");
             System.err.println("Usage: git-remote-s3enc -generateKey");
+            System.err.println("Usage: git-remote-s3enc -upload <sha1> <url>");
             System.exit(1);
         }
 
-        String url = args[2];
         if (!url.startsWith("s3enc://"))
         {
             throw new IllegalArgumentException("Unsupported repository url: " + url);
@@ -81,6 +99,14 @@ public class GitRemoteS3Enc
 
         S3EncStorage storage = new S3EncStorage(configuration);
 
-        new GitRemote(git, storage).repl();
+        GitRemote remote = new GitRemote(git, storage);
+        if (sha1 != null)
+        {
+            remote.uploadObject(new SHA1(sha1));
+        }
+        else
+        {
+            remote.repl();
+        }
     }
 }
