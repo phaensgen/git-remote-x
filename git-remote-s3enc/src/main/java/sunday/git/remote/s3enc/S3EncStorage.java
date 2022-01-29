@@ -80,4 +80,11 @@ public class S3EncStorage extends S3Storage
         byte[] encryptedContent = super.downloadFile(path);
         return encryptionUtils.decrypt(encryptedContent, secretKey);
     }
+
+    @Override
+    public InputStream downloadStream(Path path)
+    {
+        InputStream in = super.downloadStream(path);
+        return encryptionUtils.decrypt(in, secretKey);
+    }
 }

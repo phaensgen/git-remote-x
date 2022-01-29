@@ -2,11 +2,11 @@ package sunday.git.remote;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -516,9 +516,9 @@ public class GitRemote
         logger.debug("Downloading object: " + sha1);
 
         Path path = objectPath(sha1);
-        byte[] data = storage.downloadFile(path);
-
-        SHA1 computedSha1 = decodeObject(data);
+        InputStream in = storage.downloadStream(path);
+        
+        SHA1 computedSha1 = decodeObject(in);
         if (!computedSha1.equals(sha1))
         {
             throw new GitRemoteException("Provided and computed hashes do not match: " + sha1 + " != " + computedSha1);
@@ -679,21 +679,20 @@ public class GitRemote
     }
 
     /**
-     * Decodes the encoded object and writes it to the local repository.
+     * Decodes the encoded object from the input stream and writes it to the local repository.
      * Returns the computed hash for the contents which represents the object id.
      */
-    private SHA1 decodeObject(byte[] data)
+    private SHA1 decodeObject(InputStream in)
     {
         ByteArrayOutputStream header = new ByteArrayOutputStream();
-        ByteArrayOutputStream content = new ByteArrayOutputStream();
 
         // git uses zlib compression
-        try (InflaterInputStream in = new InflaterInputStream(new ByteArrayInputStream(data)))
+        try (InflaterInputStream inf = new InflaterInputStream(in))
         {
             // collect header
             while (true)
             {
-                int ch = in.read();
+                int ch = inf.read();
 
                 // 0 is the separator between header and content
                 if (ch <= 0)
@@ -704,28 +703,16 @@ public class GitRemote
                 header.write(ch);
             }
 
-            // collect content
-            while (true)
-            {
-                int ch = in.read();
-                if (ch < 0)
-                {
-                    break;
-                }
+            String headerString = new String(header.toByteArray(), StandardCharsets.UTF_8);
+            String[] h = headerString.split(" ");
+            GitObjectType type = GitObjectType.valueOf(h[0].toUpperCase());
 
-                content.write(ch);
-            }
+            return git.writeObject(type, inf);
         }
         catch (IOException ex)
         {
             throw new GitRemoteException(ex);
         }
-
-        String headerString = new String(header.toByteArray(), StandardCharsets.UTF_8);
-        String[] h = headerString.split(" ");
-        GitObjectType type = GitObjectType.valueOf(h[0].toUpperCase());
-
-        return git.writeObject(type, content.toByteArray());
     }
 
     /**

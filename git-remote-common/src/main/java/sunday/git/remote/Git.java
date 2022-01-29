@@ -144,6 +144,15 @@ public class Git
     public SHA1 writeObject(GitObjectType type, byte[] contents)
     {
         ByteArrayInputStream in = new ByteArrayInputStream(contents);
+        return writeObject(type, in);
+    }
+
+    /**
+     * Writes an object provided as an input stream to the database and returns its content hash.
+     * This method should be used for large files.
+     */
+    public SHA1 writeObject(GitObjectType type, InputStream in)
+    {
         GitResult result = executeGitCommand(in, "hash-object", "-w", "--stdin", "-t", type.toLowerName());
         return new SHA1(result.getFirstLine());
     }

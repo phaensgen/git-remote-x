@@ -1,6 +1,7 @@
 package sunday.git.remote;
 
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Collection;
 
@@ -34,6 +35,12 @@ public interface Storage
      * exception is thrown.
      */
     byte[] downloadFile(Path path);
+
+    /**
+     * Downloads an existing file from the storage and returns an input stream to the content.
+     * This can be used for large files.
+     */
+    public InputStream downloadStream(Path path);
 
     /**
      * Deletes the file with the given path from the storage.

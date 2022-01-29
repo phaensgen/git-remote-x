@@ -161,10 +161,8 @@ If you loose it, your bucket contents will be lost, too.
 If you want to clone the repository to another machine, you need to configure the same encryption key there first.
 
 ## Open Issues
-* parallel uploads
 * parallel downloads
-* support large files for s3
-* support large files for s3enc
+* encryption as layer on top of arbitrary storage
 
 # References
 This project has been inspired by other git-remote-helper implementations, in particular by

@@ -3,6 +3,7 @@ package sunday.git.remote.s3;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -99,6 +100,29 @@ public class S3Storage implements Storage
         catch (IOException io)
         {
             throw new GitRemoteException(io);
+        }
+    }
+
+    @Override
+    public InputStream downloadStream(Path path)
+    {
+        String bucketName = configuration.getBucketName();
+        String key = getKey(path);
+
+        S3Object o = s3.getObject(bucketName, key);
+
+        try
+        {
+            return o.getObjectContent();
+        }
+        catch (AmazonS3Exception ex)
+        {
+            if (ex.getStatusCode() == HttpStatus.SC_NOT_FOUND)
+            {
+                throw new GitRemoteException("File not found: " + key);
+            }
+
+            throw new GitRemoteException(ex);
         }
     }
 

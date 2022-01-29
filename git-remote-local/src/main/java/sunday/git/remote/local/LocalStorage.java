@@ -1,7 +1,10 @@
 package sunday.git.remote.local;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,6 +82,21 @@ public class LocalStorage implements Storage
         try
         {
             return Files.readAllBytes(filePath);
+        }
+        catch (IOException io)
+        {
+            throw new GitRemoteException(io);
+        }
+    }
+
+    @Override
+    public InputStream downloadStream(Path path)
+    {
+        Path filePath = baseDir.resolve(path);
+
+        try
+        {
+            return new BufferedInputStream(new FileInputStream(filePath.toFile()));
         }
         catch (IOException io)
         {
