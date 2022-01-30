@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,7 +57,7 @@ public class GitRemote
      */
     private Map<String, SHA1> pushed;
 
-    private Deque<SHA1> fetchTodo;
+    private Collection<SHA1> fetchTodo;
     private Collection<SHA1> fetchDone;
 
     private ExecutorService threadPool;
@@ -73,9 +75,10 @@ public class GitRemote
         remoteRefs = new HashMap<>();
         pushed = new HashMap<>();
 
-        fetchTodo = new ArrayDeque<>();
+        fetchTodo = new HashSet<>();
         fetchDone = new HashSet<>();
 
+        logger.debug("Using " + MAX_THREADS + " threads.");
         threadPool = Executors.newFixedThreadPool(MAX_THREADS);
     }
 
@@ -232,54 +235,52 @@ public class GitRemote
      */
     private void fetch(SHA1 sha1)
     {
-        fetchTodo.push(sha1);
-
         boolean changed = false;
 
-        while (!fetchTodo.isEmpty())
+        // the list of asynchronous fetch tasks that are currently scheduled
+        Map<SHA1, Future<Collection<SHA1>>> fetchTasks = new HashMap<>();
+        if (!fetchDone.contains(sha1))
         {
-            SHA1 sha = fetchTodo.pop();
-            if (fetchDone.contains(sha))
-            {
-                continue;
-            }
-
-            if (git.objectExists(sha))
-            {
-                if (sha.equals(SHA1.EMPTY_TREE_HASH))
-                {
-                    // git.objectExists() returns true for the empty
-                    // tree hash even if it's not present in the object
-                    // store. Everything will work fine in this situation,
-                    // but "git fsck" will complain if it's not present, so
-                    // we explicitly add it to avoid that.
-                    git.writeObject(GitObjectType.TREE, new byte[0]);
-                }
-
-                if (!git.historyExists(sha))
-                {
-                    // this can only happen in the case of aborted fetches
-                    // that are resumed later
-                    // resolve them too
-                    Collection<SHA1> refs = getReferencedObjects(sha);
-                    fetchTodo.addAll(refs);
-                }
-            }
-            else
-            {
-                // new object, get it and resolve all its references
-                downloadObject(sha);
-
-                Collection<SHA1> refs = getReferencedObjects(sha);
-                fetchTodo.addAll(refs);
-            }
-            fetchDone.add(sha);
+            fetchTasks.put(sha1, threadPool.submit(new FetchTask(sha1)));
+            fetchTodo.add(sha1);
             changed = true;
+        }
 
-            int doneCount = fetchDone.size();
-            int totalCount = fetchTodo.size() + doneCount;
-            int percent = doneCount * 100 / totalCount;
-            logger.progress("Fetching objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
+        while (!fetchTasks.isEmpty())
+        {
+            // get some scheduled task
+            Entry<SHA1, Future<Collection<SHA1>>> entry = fetchTasks.entrySet().iterator().next();
+
+            Future<Collection<SHA1>> fetchTask = entry.getValue();
+            SHA1 sha = entry.getKey();
+
+            try
+            {
+                // wait for its completion
+                Collection<SHA1> references = fetchTask.get();
+
+                // submit new tasks for resulting fetches
+                for (SHA1 todo : references)
+                {
+                    if (!fetchDone.contains(todo) && !fetchTodo.contains(todo))
+                    {
+                        fetchTasks.put(todo, threadPool.submit(new FetchTask(todo)));
+                        fetchTodo.add(todo);
+                    }
+                }
+
+                fetchTasks.remove(sha);
+                fetchDone.add(sha);
+
+                int doneCount = fetchDone.size();
+                int totalCount = fetchTodo.size() + doneCount;
+                int percent = doneCount * 100 / totalCount;
+                logger.progress("Fetching objects: " + percent + "% (" + doneCount + " / " + totalCount + ")");
+            }
+            catch (Exception ex)
+            {
+                System.out.println("error " + ex.getMessage());
+            }
         }
 
         if (changed)
@@ -382,8 +383,6 @@ public class GitRemote
         logger.debug("Found " + objects.size() + " objects, excluding " + excludes.size() + " remote refs.");
 
         Deque<Future<?>> tasks = new ArrayDeque<>();
-
-        logger.debug("Using " + MAX_THREADS + " threads.");
 
         // before updating the ref, write all objects that are referenced
         // schedule upload tasks
@@ -517,7 +516,7 @@ public class GitRemote
 
         Path path = objectPath(sha1);
         InputStream in = storage.downloadStream(path);
-        
+
         SHA1 computedSha1 = decodeObject(in);
         if (!computedSha1.equals(sha1))
         {
@@ -814,6 +813,61 @@ public class GitRemote
             {
                 uploadObject(sha1);
             }
+        }
+    }
+
+    /**
+     * Performs a fetch for a single object in an asynchronous operation.
+     * Returns the references of the object for subsequent retrieval.
+     * 
+     * @author Peter H&auml;nsgen
+     */
+    class FetchTask implements Callable<Collection<SHA1>>
+    {
+        private SHA1 sha1;
+
+        /**
+         * The constructor.
+         */
+        private FetchTask(SHA1 sha1)
+        {
+            this.sha1 = sha1;
+        }
+
+        @Override
+        public Collection<SHA1> call()
+        {
+            Collection<SHA1> references = null;
+
+            if (git.objectExists(sha1))
+            {
+                if (sha1.equals(SHA1.EMPTY_TREE_HASH))
+                {
+                    // git.objectExists() returns true for the empty
+                    // tree hash even if it's not present in the object
+                    // store. Everything will work fine in this situation,
+                    // but "git fsck" will complain if it's not present, so
+                    // we explicitly add it to avoid that.
+                    git.writeObject(GitObjectType.TREE, new byte[0]);
+                }
+
+                if (!git.historyExists(sha1))
+                {
+                    // this can only happen in the case of aborted fetches
+                    // that are resumed later
+                    // resolve them too
+                    references = getReferencedObjects(sha1);
+                }
+            }
+            else
+            {
+                // new object, get it and resolve all its references
+                downloadObject(sha1);
+
+                references = getReferencedObjects(sha1);
+            }
+
+            return references != null ? references : Collections.emptyList();
         }
     }
 }

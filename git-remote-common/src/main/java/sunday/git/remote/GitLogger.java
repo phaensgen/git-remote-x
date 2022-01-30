@@ -71,7 +71,7 @@ public class GitLogger
     {
         if (lastProgressMessage != null)
         {
-            if (lastProgressMessage.length() < message.length())
+            if (lastProgressMessage.length() > message.length())
             {
                 // cursor back
                 System.err.print("\r");
