@@ -3,6 +3,7 @@ package sunday.git.remote.local;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import sunday.git.remote.Git;
 import sunday.git.remote.GitRemote;
@@ -27,6 +28,7 @@ public class GitRemoteLocal
     {
         if (args.length != 3)
         {
+            System.err.println("Invalid arguments: " + Arrays.toString(args));
             System.err.println("Usage: git-remote-local <remote> <url>");
             System.exit(1);
         }

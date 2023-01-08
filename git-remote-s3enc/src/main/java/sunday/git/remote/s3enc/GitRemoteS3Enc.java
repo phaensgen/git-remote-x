@@ -3,6 +3,7 @@ package sunday.git.remote.s3enc;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import javax.crypto.SecretKey;
 
@@ -56,6 +57,7 @@ public class GitRemoteS3Enc
         }
         else
         {
+            System.err.println("Invalid arguments: " + Arrays.toString(args));
             System.err.println("Usage: git-remote-s3enc <remote> <url>");
             System.err.println("Usage: git-remote-s3enc -generateKey");
             System.err.println("Usage: git-remote-s3enc -uploadObject <sha1> <url>");

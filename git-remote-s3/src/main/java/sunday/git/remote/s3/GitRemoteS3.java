@@ -3,6 +3,7 @@ package sunday.git.remote.s3;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import sunday.git.remote.Git;
 import sunday.git.remote.GitRemote;
@@ -24,6 +25,7 @@ public class GitRemoteS3
     {
         if (args.length != 3)
         {
+            System.err.println("Invalid arguments: " + Arrays.toString(args));
             System.err.println("Usage: git-remote-s3 <remote> <url>");
             System.exit(1);
         }
